@@ -1,0 +1,13 @@
+node_modules/
+dist/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+.env
+*.log
+.DS_Store
+.mcp.json
+.playwright-mcp/
+.bkit-memory.json
+.pdca-status.json
+.omc/

@@ -1,0 +1,26 @@
+{
+  "name": "ai-pm-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MCP-based AI autonomous project management system",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev:mcp": "pnpm --filter @ai-pm/mcp-server dev",
+    "dev:ui": "pnpm --filter @ai-pm/web-ui dev",
+    "test": "pnpm -r test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "start:api": "node packages/mcp-server/dist/api-server.js"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "typescript": "^5.6.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "better-sqlite3",
+      "esbuild"
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+FROM node:22-slim
+
+RUN npm install -g pnpm@9
+
+WORKDIR /app
+
+# Copy workspace files
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY packages/mcp-server/package.json packages/mcp-server/
+COPY packages/web-ui/package.json packages/web-ui/
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Copy source
+COPY packages/mcp-server/ packages/mcp-server/
+COPY packages/web-ui/ packages/web-ui/
+
+# Build
+RUN pnpm --filter @ai-pm/mcp-server build
+RUN pnpm --filter @ai-pm/web-ui build
+
+# Create data directory
+RUN mkdir -p /app/data
+
+ENV PORT=3001
+ENV DB_PATH=/app/data/pm.db
+ENV STATIC_PATH=/app/packages/web-ui/dist
+
+EXPOSE 3001
+
+CMD ["node", "packages/mcp-server/dist/api-server.js"]
