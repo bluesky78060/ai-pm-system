@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: ai-pm-system
+    runtime: docker
+    branch: master
+    plan: free
+    healthCheckPath: /api/projects
+    envVars:
+      - key: DB_PATH
+        value: /app/data/pm.db
+      - key: STATIC_PATH
+        value: /app/packages/web-ui/dist
