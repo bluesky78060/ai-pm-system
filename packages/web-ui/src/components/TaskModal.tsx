@@ -11,7 +11,7 @@ interface FixHistory {
 interface Activity {
   id: number;
   task_id: string | null;
-  actor: 'ai' | 'human' | 'github';
+  actor: 'ai' | 'human' | 'github' | 'system';
   action: string;
   payload: Record<string, unknown> | null;
   created_at: string;
@@ -21,6 +21,7 @@ const ACTOR_CONFIG: Record<string, { label: string; color: string; icon: string 
   ai:     { label: 'AI',     color: 'text-violet-400', icon: 'M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 00.659 1.591L19 14.5M14.25 3.104c.251.023.501.05.75.082M19 14.5l-2.47 2.47a2.25 2.25 0 01-1.591.659H9.061a2.25 2.25 0 01-1.591-.659L5 14.5m14 0V17a2.25 2.25 0 01-2.25 2.25H7.25A2.25 2.25 0 015 17v-2.5' },
   human:  { label: 'Human',  color: 'text-blue-400',   icon: 'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0' },
   github: { label: 'GitHub', color: 'text-slate-400',  icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101M10.172 13.828a4 4 0 015.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101' },
+  system: { label: 'System', color: 'text-emerald-400', icon: 'M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93s.844.141 1.185-.058l.764-.46a1.14 1.14 0 011.37.187l.774.774a1.14 1.14 0 01.187 1.37l-.46.764c-.2.34-.224.79-.058 1.185s.506.71.93.78l.894.15c.542.09.94.56.94 1.109v1.094c0 .55-.398 1.02-.94 1.11l-.894.149c-.424.07-.764.384-.93.78s-.141.844.058 1.185l.46.764a1.14 1.14 0 01-.187 1.37l-.774.774a1.14 1.14 0 01-1.37.187l-.764-.46c-.34-.2-.79-.224-1.185-.058s-.71.506-.78.93l-.15.894c-.09.542-.56.94-1.109.94h-1.094c-.55 0-1.02-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93s-.844-.141-1.185.058l-.764.46a1.14 1.14 0 01-1.37-.187l-.774-.774a1.14 1.14 0 01-.187-1.37l.46-.764c.2-.34.224-.79.058-1.185s-.506-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.148c.424-.071.764-.384.93-.781s.141-.844-.058-1.185l-.46-.764a1.14 1.14 0 01.187-1.37l.774-.774a1.14 1.14 0 011.37-.187l.764.46c.34.2.79.224 1.185.058s.71-.506.78-.93l.15-.894zM15 12a3 3 0 11-6 0 3 3 0 016 0z' },
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
@@ -209,12 +210,16 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
                 </div>
               )}
 
-              {/* Implementation History (Activity Log) */}
-              {activities.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-300 mb-3">
-                    구현 히스토리 ({activities.length})
-                  </h3>
+              {/* Activity Log */}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-300 mb-3">
+                  활동 로그 ({activities.length})
+                </h3>
+                {activities.length === 0 ? (
+                  <div className="text-xs text-slate-500 bg-slate-800/30 rounded-lg px-4 py-6 text-center">
+                    아직 활동 기록이 없습니다
+                  </div>
+                ) : (
                   <div className="relative pl-4 border-l border-slate-700/60 space-y-3">
                     {activities.map((act) => {
                       const actor = ACTOR_CONFIG[act.actor] ?? ACTOR_CONFIG.human;
@@ -223,7 +228,7 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
                         <div key={act.id} className="relative">
                           {/* Timeline dot */}
                           <div className={`absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full border-2 border-[#12141F] ${
-                            act.actor === 'ai' ? 'bg-violet-500' : act.actor === 'github' ? 'bg-slate-500' : 'bg-blue-500'
+                            act.actor === 'ai' ? 'bg-violet-500' : act.actor === 'system' ? 'bg-emerald-500' : act.actor === 'github' ? 'bg-slate-500' : 'bg-blue-500'
                           }`} />
                           <div className="bg-slate-800/30 rounded-lg px-3.5 py-2.5">
                             <div className="flex items-center gap-2 mb-1">
@@ -249,8 +254,8 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
                       );
                     })}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Test & Fix History */}
               {fixHistory && (fixHistory.testRuns.length > 0 || fixHistory.fixAttempts.length > 0) && (
