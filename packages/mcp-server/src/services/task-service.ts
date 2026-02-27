@@ -1,9 +1,11 @@
 import { TaskRepository } from '../db/repositories/task-repo.js';
+import { EpicRepository } from '../db/repositories/epic-repo.js';
 import { ActivityRepository } from '../db/repositories/activity-repo.js';
 import { UUID_REGEX } from '../utils/code-gen.js';
 import type { Task, TaskStatus } from '../types/index.js';
 
 const taskRepo = new TaskRepository();
+const epicRepo = new EpicRepository();
 const activityRepo = new ActivityRepository();
 
 async function resolveTask(idOrCode: string): Promise<Task> {
@@ -45,13 +47,29 @@ export class TaskService {
     title: string;
     epic_id?: string;
     parent_id?: string;
+    project_id?: string;
     description?: string;
     priority?: number;
     assignee?: string;
     created_by?: 'ai' | 'human';
     estimated_hrs?: number;
   }): Promise<{ task: Task; message: string }> {
-    const task = await taskRepo.create(data);
+    // project_id가 있고 epic_id가 없으면 기본 에픽에 자동 연결
+    if (data.project_id && !data.epic_id) {
+      const epics = await epicRepo.findByProject(data.project_id);
+      let defaultEpic = epics.find(e => e.title === 'General');
+      if (!defaultEpic) {
+        defaultEpic = await epicRepo.create({
+          project_id: data.project_id,
+          title: 'General',
+          description: '기본 에픽 (project_id로 생성된 태스크 자동 연결)',
+          priority: 5,
+        });
+      }
+      data.epic_id = defaultEpic.id;
+    }
+    const { project_id: _pid, ...createData } = data;
+    const task = await taskRepo.create(createData);
     await activityRepo.create({
       task_id: task.id,
       actor: data.created_by ?? 'human',
