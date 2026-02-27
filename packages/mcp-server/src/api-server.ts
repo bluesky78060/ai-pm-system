@@ -234,6 +234,45 @@ app.patch('/api/automation/:ruleId/toggle', wrapAsync(async (req) =>
   automationService.toggleRule(req.params.ruleId as string)
 ));
 
+// === Seed demo activities for a task ===
+app.post('/api/tasks/:id/seed-activities', wrapAsync(async (req) => {
+  const taskId = req.params.id as string;
+  const task = await taskService.getById(taskId);
+  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+
+  // Check existing activities to avoid duplicates
+  const existing = await activityRepo.findByTask(taskId, 1);
+  const hasSeed = existing.some((a: { action: string }) => a.action === 'ai_analysis');
+  if (hasSeed) return { message: '이미 데모 데이터가 존재합니다', taskId };
+
+  // Base time: task creation time
+  const base = new Date(task.created_at).getTime();
+  const min = (m: number) => new Date(base + m * 60000).toISOString();
+
+  const activities = req.body.activities as {
+    actor: 'ai' | 'human' | 'github' | 'system';
+    action: string;
+    payload: Record<string, unknown>;
+    offset_min: number;
+  }[];
+
+  if (!activities || !Array.isArray(activities)) {
+    throw new Error('activities 배열이 필요합니다');
+  }
+
+  const inserted = [];
+  for (const a of activities) {
+    const pool = (await import('./db/connection.js')).getPool();
+    const { rows } = await pool.query(
+      'INSERT INTO activity_log (task_id, actor, action, payload, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [taskId, a.actor, a.action, JSON.stringify(a.payload), min(a.offset_min)]
+    );
+    inserted.push(rows[0]);
+  }
+
+  return { message: `${inserted.length}개 활동 로그 삽입 완료`, taskId };
+}));
+
 // Serve static files (Web UI)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const staticPath = process.env.STATIC_PATH ?? path.join(__dirname, '../../web-ui/dist');
