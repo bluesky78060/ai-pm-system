@@ -159,6 +159,44 @@ const MIGRATIONS = [
       }
     },
   },
+  // v3: Add automation rules table
+  {
+    id: 'v3_automation_rules',
+    sql: `
+      CREATE TABLE IF NOT EXISTS automation_rules (
+        id            TEXT PRIMARY KEY,
+        project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name          TEXT NOT NULL,
+        trigger_event TEXT NOT NULL CHECK(trigger_event IN ('epic_completed', 'task_stale', 'all_tests_pass', 'status_change')),
+        condition     TEXT,
+        action_type   TEXT NOT NULL CHECK(action_type IN ('notify', 'auto_transition', 'create_task')),
+        action_config TEXT,
+        enabled       INTEGER NOT NULL DEFAULT 1,
+        created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_automation_rules_project ON automation_rules(project_id);
+      CREATE INDEX IF NOT EXISTS idx_automation_rules_trigger ON automation_rules(trigger_event);
+    `,
+  },
+  // v4: Extend activity_log actor to include 'system'
+  {
+    id: 'v4_activity_log_system_actor',
+    sql: `
+      CREATE TABLE IF NOT EXISTS activity_log_new (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id    TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+        actor      TEXT NOT NULL CHECK(actor IN ('ai', 'human', 'github', 'system')),
+        action     TEXT NOT NULL,
+        payload    TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO activity_log_new SELECT * FROM activity_log;
+      DROP TABLE activity_log;
+      ALTER TABLE activity_log_new RENAME TO activity_log;
+      CREATE INDEX IF NOT EXISTS idx_activity_task ON activity_log(task_id);
+      CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_log(created_at);
+    `,
+  },
 ];
 
 export function runMigrations(): void {

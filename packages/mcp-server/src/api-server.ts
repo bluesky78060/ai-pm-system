@@ -9,6 +9,9 @@ import { ContextService } from './services/context-service.js';
 import { TestService } from './services/test-service.js';
 import { GitHubService } from './services/github-service.js';
 import { ActivityRepository } from './db/repositories/activity-repo.js';
+import { WorkflowService } from './services/workflow-service.js';
+import { AnalysisService } from './services/analysis-service.js';
+import { AutomationService } from './services/automation-service.js';
 
 runMigrations();
 
@@ -18,6 +21,9 @@ const contextService = new ContextService();
 const testService = new TestService();
 const githubService = new GitHubService();
 const activityRepo = new ActivityRepository();
+const workflowService = new WorkflowService();
+const analysisService = new AnalysisService();
+const automationService = new AutomationService();
 
 const app = express();
 app.use(cors());
@@ -157,6 +163,54 @@ app.get('/api/projects/:id/activities', wrapSync((req) => {
   allActivities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   return { activities: allActivities.slice(0, limit) };
 }));
+
+// === Workflow routes ===
+app.post('/api/workflow/:taskId', wrapSync((req) => {
+  const { action, test_results, notes } = req.body;
+  switch (action) {
+    case 'start_work': return workflowService.startWork(req.params.taskId as string);
+    case 'submit_test': return workflowService.submitTest(req.params.taskId as string, test_results);
+    case 'complete_fix': return workflowService.completeFix(req.params.taskId as string, notes);
+    case 'approve_review': return workflowService.approveReview(req.params.taskId as string, notes);
+    default: throw new Error(`알 수 없는 워크플로우 액션: ${action}`);
+  }
+}));
+
+// === Analysis routes ===
+app.get('/api/projects/:id/analysis/:type', wrapSync((req) => {
+  const type = req.params.type as string;
+  switch (type) {
+    case 'daily_report': return analysisService.dailyReport(req.params.id as string);
+    case 'bottleneck': return analysisService.bottleneck(req.params.id as string);
+    case 'velocity': return analysisService.velocity(req.params.id as string);
+    default: throw new Error(`알 수 없는 분석 타입: ${type}`);
+  }
+}));
+
+// === Automation routes ===
+app.get('/api/projects/:id/automation', wrapSync((req) => ({
+  rules: automationService.listRules(req.params.id as string),
+})));
+
+app.post('/api/projects/:id/automation', wrapSync((req) =>
+  automationService.createRule(
+    req.params.id as string,
+    req.body.name,
+    req.body.trigger_event,
+    req.body.action_type,
+    req.body.condition,
+    req.body.action_config,
+  )
+));
+
+app.delete('/api/automation/:ruleId', wrapSync((req) => {
+  automationService.deleteRule(req.params.ruleId as string);
+  return { message: '규칙 삭제 완료' };
+}));
+
+app.patch('/api/automation/:ruleId/toggle', wrapSync((req) =>
+  automationService.toggleRule(req.params.ruleId as string)
+));
 
 // Serve static files (Web UI)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

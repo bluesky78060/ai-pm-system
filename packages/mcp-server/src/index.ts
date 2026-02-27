@@ -8,6 +8,10 @@ import { ContextService } from './services/context-service.js';
 import { TestService } from './services/test-service.js';
 import { GitHubService } from './services/github-service.js';
 import { ActivityRepository } from './db/repositories/activity-repo.js';
+import { WorkflowService } from './services/workflow-service.js';
+import { AnalysisService } from './services/analysis-service.js';
+import { AutomationService } from './services/automation-service.js';
+import type { AutomationTrigger, AutomationAction } from './types/entities.js';
 
 const ErrorCode = {
   NOT_FOUND: 'NOT_FOUND',
@@ -43,6 +47,9 @@ const contextService = new ContextService();
 const testService = new TestService();
 const githubService = new GitHubService();
 const activityRepo = new ActivityRepository();
+const workflowService = new WorkflowService();
+const analysisService = new AnalysisService();
+const automationService = new AutomationService();
 
 // Create MCP server
 const server = new Server(
@@ -413,6 +420,64 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['project_id'],
       },
     },
+    // Subagent tools
+    {
+      name: 'smart_workflow',
+      description: 'Execute compound workflow actions in a single call. Combines status transitions, test recording, and context retrieval.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          task_id: { type: 'string', description: 'Task ID or ticket code' },
+          action: { type: 'string', enum: ['start_work', 'submit_test', 'complete_fix', 'approve_review'], description: 'Workflow action' },
+          test_results: {
+            type: 'array', description: 'Test results (required for submit_test)',
+            items: {
+              type: 'object',
+              properties: {
+                test_type: { type: 'string', enum: ['unit', 'type', 'lint', 'integration', 'build'] },
+                status: { type: 'string', enum: ['pass', 'fail', 'skip'] },
+                output: { type: 'string' },
+                failures: { type: 'string' },
+                duration_ms: { type: 'number' },
+              },
+              required: ['test_type', 'status'],
+            },
+          },
+          notes: { type: 'string', description: 'Optional notes' },
+        },
+        required: ['task_id', 'action'],
+      },
+    },
+    {
+      name: 'auto_analyze',
+      description: 'Run automated project analysis: daily report, bottleneck detection, or velocity metrics.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_id: { type: 'string', description: 'Project ID' },
+          analysis_type: { type: 'string', enum: ['daily_report', 'bottleneck', 'velocity'], description: 'Type of analysis' },
+        },
+        required: ['project_id', 'analysis_type'],
+      },
+    },
+    {
+      name: 'manage_automation',
+      description: 'Manage automation rules for event-driven actions.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          action: { type: 'string', enum: ['list', 'create', 'delete', 'toggle'], description: 'CRUD action' },
+          project_id: { type: 'string', description: 'Project ID (required for list/create)' },
+          rule_id: { type: 'string', description: 'Rule ID (required for delete/toggle)' },
+          name: { type: 'string', description: 'Rule name (for create)' },
+          trigger_event: { type: 'string', enum: ['epic_completed', 'task_stale', 'all_tests_pass', 'status_change'], description: 'Trigger event (for create)' },
+          action_type: { type: 'string', enum: ['notify', 'auto_transition', 'create_task'], description: 'Action type (for create)' },
+          condition: { type: 'string', description: 'JSON condition (for create)' },
+          action_config: { type: 'string', description: 'JSON action config (for create)' },
+        },
+        required: ['action'],
+      },
+    },
   ],
 }));
 
@@ -608,6 +673,75 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           const allActivities = taskIds.flatMap(tid => activityRepo.findByTask(tid, projLimit));
           allActivities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
           result = { activities: allActivities.slice(0, projLimit) };
+        }
+        break;
+      }
+      // Subagent tools
+      case 'smart_workflow': {
+        const action = args?.action as string;
+        switch (action) {
+          case 'start_work':
+            result = workflowService.startWork(args?.task_id as string);
+            break;
+          case 'submit_test':
+            result = workflowService.submitTest(
+              args?.task_id as string,
+              args?.test_results as { test_type: string; status: string; output?: string; failures?: string; duration_ms?: number }[],
+            );
+            break;
+          case 'complete_fix':
+            result = workflowService.completeFix(args?.task_id as string, args?.notes as string | undefined);
+            break;
+          case 'approve_review':
+            result = workflowService.approveReview(args?.task_id as string, args?.notes as string | undefined);
+            break;
+          default:
+            throw new Error(`알 수 없는 워크플로우 액션: ${action}`);
+        }
+        break;
+      }
+      case 'auto_analyze': {
+        const analysisType = args?.analysis_type as string;
+        switch (analysisType) {
+          case 'daily_report':
+            result = analysisService.dailyReport(args?.project_id as string);
+            break;
+          case 'bottleneck':
+            result = analysisService.bottleneck(args?.project_id as string);
+            break;
+          case 'velocity':
+            result = analysisService.velocity(args?.project_id as string);
+            break;
+          default:
+            throw new Error(`알 수 없는 분석 타입: ${analysisType}`);
+        }
+        break;
+      }
+      case 'manage_automation': {
+        const automationAction = args?.action as string;
+        switch (automationAction) {
+          case 'list':
+            result = { rules: automationService.listRules(args?.project_id as string) };
+            break;
+          case 'create':
+            result = automationService.createRule(
+              args?.project_id as string,
+              args?.name as string,
+              args?.trigger_event as AutomationTrigger,
+              args?.action_type as AutomationAction,
+              args?.condition as string | undefined,
+              args?.action_config as string | undefined,
+            );
+            break;
+          case 'delete':
+            automationService.deleteRule(args?.rule_id as string);
+            result = { message: '규칙 삭제 완료' };
+            break;
+          case 'toggle':
+            result = automationService.toggleRule(args?.rule_id as string);
+            break;
+          default:
+            throw new Error(`알 수 없는 자동화 액션: ${automationAction}`);
         }
         break;
       }

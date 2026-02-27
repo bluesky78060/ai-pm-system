@@ -11,7 +11,7 @@ export class ActivityRepository {
 
   create(data: {
     task_id?: string;
-    actor: 'ai' | 'human' | 'github';
+    actor: 'ai' | 'human' | 'github' | 'system';
     action: string;
     payload?: Record<string, unknown>;
   }): ActivityLog {

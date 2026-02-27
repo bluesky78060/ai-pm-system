@@ -3,7 +3,7 @@ export type EpicStatus = 'todo' | 'in_progress' | 'done';
 export type TaskStatus = 'todo' | 'in_progress' | 'testing' | 'fixing' | 'review' | 'done' | 'blocked';
 export type TestType = 'unit' | 'type' | 'lint' | 'integration' | 'build';
 export type TestStatus = 'pass' | 'fail' | 'skip';
-export type Actor = 'ai' | 'human' | 'github';
+export type Actor = 'ai' | 'human' | 'github' | 'system';
 export type FixResultStatus = 'pass' | 'fail' | 'escalated';
 
 export interface Project {
@@ -98,4 +98,21 @@ export interface FileChange {
   file_path: string;
   change_type: 'create' | 'modify' | 'delete';
   diff_summary?: string;
+}
+
+export type WorkflowAction = 'start_work' | 'submit_test' | 'complete_fix' | 'approve_review';
+export type AnalysisType = 'daily_report' | 'bottleneck' | 'velocity';
+export type AutomationTrigger = 'epic_completed' | 'task_stale' | 'all_tests_pass' | 'status_change';
+export type AutomationAction = 'notify' | 'auto_transition' | 'create_task';
+
+export interface AutomationRule {
+  id: string;
+  project_id: string;
+  name: string;
+  trigger_event: AutomationTrigger;
+  condition: string | null;  // JSON condition
+  action_type: AutomationAction;
+  action_config: string | null;  // JSON config
+  enabled: boolean;
+  created_at: string;
 }
