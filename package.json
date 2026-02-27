@@ -2,6 +2,7 @@
   "name": "ai-pm-system",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@10.30.3",
   "description": "MCP-based AI autonomous project management system",
   "scripts": {
     "build": "pnpm -r build",
