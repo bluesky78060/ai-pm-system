@@ -12,6 +12,7 @@ import { WorkflowService } from './services/workflow-service.js';
 import { AnalysisService } from './services/analysis-service.js';
 import { AutomationService } from './services/automation-service.js';
 import type { AutomationTrigger, AutomationAction } from './types/entities.js';
+import { isRemoteMode, executeRemote } from './remote-client.js';
 
 const ErrorCode = {
   NOT_FOUND: 'NOT_FOUND',
@@ -38,18 +39,21 @@ function classifyError(error: Error): { code: string; message: string } {
   return { code: ErrorCode.UNKNOWN, message: msg };
 }
 
-// Initialize database
-runMigrations();
+// Initialize: local mode only (remote mode skips DB)
+const remote = isRemoteMode();
+if (!remote) {
+  runMigrations();
+}
 
-const projectService = new ProjectService();
-const taskService = new TaskService();
-const contextService = new ContextService();
-const testService = new TestService();
-const githubService = new GitHubService();
-const activityRepo = new ActivityRepository();
-const workflowService = new WorkflowService();
-const analysisService = new AnalysisService();
-const automationService = new AutomationService();
+const projectService = remote ? null! : new ProjectService();
+const taskService = remote ? null! : new TaskService();
+const contextService = remote ? null! : new ContextService();
+const testService = remote ? null! : new TestService();
+const githubService = remote ? null! : new GitHubService();
+const activityRepo = remote ? null! : new ActivityRepository();
+const workflowService = remote ? null! : new WorkflowService();
+const analysisService = remote ? null! : new AnalysisService();
+const automationService = remote ? null! : new AutomationService();
 
 // Create MCP server
 const server = new Server(
@@ -485,6 +489,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   try {
+    // Remote mode: proxy all calls to REST API
+    if (remote) {
+      const result = await executeRemote(name, (args ?? {}) as Record<string, unknown>);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      };
+    }
+
+    // Local mode: direct service calls
     let result: unknown;
 
     switch (name) {
