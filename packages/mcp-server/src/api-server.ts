@@ -15,6 +15,35 @@ import { AutomationService } from './services/automation-service.js';
 
 runMigrations();
 
+// Seed: 배포판에서 DB가 비어있으면 기본 프로젝트 데이터 생성
+function seedIfEmpty() {
+  const ps = new ProjectService();
+  const existing = ps.getAll();
+  if (existing.length > 0) return;
+
+  console.log('[Seed] Empty DB detected, creating default project...');
+  const project = ps.create({
+    name: 'AI PM System',
+    description: 'MCP 기반 AI 자율 개발 프로젝트 관리 시스템',
+    github_repo: 'leechanhee/ai-pm-system',
+  });
+
+  const epics = [
+    { title: 'MCP 서버 Core', description: '기본 MCP 도구 및 데이터 레이어', priority: 1 },
+    { title: 'AI 세션 컨텍스트', description: '세션 시작 시 컨텍스트 제공', priority: 2 },
+    { title: 'Web Dashboard', description: 'React 기반 웹 대시보드', priority: 3 },
+    { title: '인 프로세스 서브에이전트', description: 'MCP 서버 내 자동화 서브에이전트', priority: 1 },
+  ];
+
+  for (const epic of epics) {
+    ps.createEpic({ project_id: project.id, ...epic });
+  }
+
+  console.log(`[Seed] Project "${project.name}" (${project.code}) created with ${epics.length} epics`);
+}
+
+seedIfEmpty();
+
 const projectService = new ProjectService();
 const taskService = new TaskService();
 const contextService = new ContextService();
