@@ -253,4 +253,14 @@ app.get('*', (_req, res) => {
 const PORT = process.env.PORT ?? process.env.API_PORT ?? 3001;
 app.listen(PORT, () => {
   console.log(`AI PM API Server running on http://localhost:${PORT}`);
+
+  // Keep-alive: Render 무료 티어 슬립 방지 (10분 간격)
+  const RENDER_URL = process.env.RENDER_EXTERNAL_URL;
+  if (RENDER_URL) {
+    const INTERVAL = 10 * 60 * 1000;
+    setInterval(() => {
+      fetch(`${RENDER_URL}/api/projects`).catch(() => {});
+    }, INTERVAL);
+    console.log(`[Keep-alive] Pinging ${RENDER_URL} every 10 minutes`);
+  }
 });
