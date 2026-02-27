@@ -1,6 +1,6 @@
 FROM node:22-slim
 
-RUN npm install -g pnpm@9
+RUN npm install -g pnpm@10
 
 WORKDIR /app
 
