@@ -138,7 +138,7 @@ export class TaskRepository {
     const fields: string[] = [];
     const values: unknown[] = [];
     let idx = 1;
-    const allowed = ['title', 'description', 'assignee', 'github_issue', 'github_pr', 'estimated_hrs', 'actual_hrs', 'blocked_by'] as const;
+    const allowed = ['title', 'description', 'assignee', 'epic_id', 'github_issue', 'github_pr', 'estimated_hrs', 'actual_hrs', 'blocked_by'] as const;
     for (const key of allowed) {
       if (data[key] !== undefined) {
         fields.push(`${key} = $${idx++}`);

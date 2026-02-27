@@ -186,6 +186,11 @@ export class TaskService {
     return { message: `의존성 추가: '${task.title}' → '${dep.title}'` };
   }
 
+  async update(idOrCode: string, data: Partial<Task>): Promise<Task> {
+    const task = await resolveTask(idOrCode);
+    return taskRepo.update(task.id, data);
+  }
+
   async getStatusCounts(projectId: string): Promise<Record<string, number>> {
     return taskRepo.countByStatus(projectId);
   }

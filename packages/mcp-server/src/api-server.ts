@@ -130,6 +130,12 @@ app.patch('/api/tasks/:id/priority', wrapAsync(async (req) =>
   taskService.setPriority(req.params.id as string, req.body.priority, req.body.reason)
 ));
 
+app.patch('/api/tasks/:id', wrapAsync(async (req) => {
+  const task = await taskService.getById(req.params.id as string);
+  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${req.params.id as string}`);
+  return taskService.update(req.params.id as string, req.body);
+}));
+
 app.post('/api/tasks/:id/decompose', wrapAsync(async (req) =>
   taskService.decompose(req.params.id as string, req.body.subtasks)
 ));
