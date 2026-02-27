@@ -178,7 +178,7 @@ function ActivityContent({ activity }: { activity: Activity }) {
         <div className="mt-2.5">
           <div className="inline-flex items-center gap-2 bg-[#1A1D2E] border border-[#2e3348] rounded-md px-3 py-1.5 font-mono text-xs">
             <span className="text-[#555e7a]">{String(payload.from ?? '')}</span>
-            <span className="text-[#555e7a]">&mdash;&blacktriangleright;</span>
+            <span className="text-[#555e7a]">{'\u2014\u25B6'}</span>
             <StatusBadge status={payload.to} />
           </div>
           {notes && <p className="text-[11px] font-mono text-[#555e7a] mt-1.5">{notes}</p>}
@@ -642,7 +642,7 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
                   onClick={onClose}
                   className="ml-auto w-7 h-7 rounded-md flex items-center justify-center text-[#555e7a] hover:bg-[#1A1D2E] hover:text-[#e8ecf4] transition-colors"
                 >
-                  \u2715
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                 </button>
               </div>
               <h2 className="text-xl font-semibold text-[#e8ecf4] leading-tight tracking-tight mb-4">{task.title}</h2>
