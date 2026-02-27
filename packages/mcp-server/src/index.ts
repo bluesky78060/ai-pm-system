@@ -392,6 +392,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           task_id: { type: 'string', description: 'Task ID' },
           commit_hash: { type: 'string', description: 'Git commit hash' },
           notes: { type: 'string', description: 'Progress notes' },
+          message: { type: 'string', description: 'Commit message' },
+          files_changed: { type: 'number', description: 'Number of files changed in the commit' },
+          additions: { type: 'number', description: 'Number of lines added' },
+          deletions: { type: 'number', description: 'Number of lines deleted' },
         },
         required: ['task_id', 'commit_hash'],
       },
@@ -661,6 +665,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           args?.task_id as string,
           args?.commit_hash as string,
           args?.notes as string | undefined,
+          args?.message as string | undefined,
+          args?.files_changed as number | undefined,
+          args?.additions as number | undefined,
+          args?.deletions as number | undefined,
         );
         break;
       }

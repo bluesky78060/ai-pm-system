@@ -1,13 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api, type Task } from '../api';
 
-interface FixHistory {
-  task: Task;
-  testRuns: { id: string; run_number: number; test_type: string; status: string; created_at: string }[];
-  fixAttempts: { id: string; attempt_number: number; fix_description: string | null; files_changed?: string[]; result_status: string; created_at: string }[];
-  summary: { totalRuns: number; totalFixes: number; lastResult: string | null };
-}
-
+/* ─────────────────────────────────────────────
+   Types
+───────────────────────────────────────────── */
 interface Activity {
   id: number;
   task_id: string | null;
@@ -17,177 +13,280 @@ interface Activity {
   created_at: string;
 }
 
-const ACTOR_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
-  ai:     { label: 'AI',     color: 'text-violet-400', icon: 'M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 00.659 1.591L19 14.5M14.25 3.104c.251.023.501.05.75.082M19 14.5l-2.47 2.47a2.25 2.25 0 01-1.591.659H9.061a2.25 2.25 0 01-1.591-.659L5 14.5m14 0V17a2.25 2.25 0 01-2.25 2.25H7.25A2.25 2.25 0 015 17v-2.5' },
-  human:  { label: 'Human',  color: 'text-blue-400',   icon: 'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0' },
-  github: { label: 'GitHub', color: 'text-slate-400',  icon: 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101M10.172 13.828a4 4 0 015.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101' },
-  system: { label: 'System', color: 'text-emerald-400', icon: 'M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93s.844.141 1.185-.058l.764-.46a1.14 1.14 0 011.37.187l.774.774a1.14 1.14 0 01.187 1.37l-.46.764c-.2.34-.224.79-.058 1.185s.506.71.93.78l.894.15c.542.09.94.56.94 1.109v1.094c0 .55-.398 1.02-.94 1.11l-.894.149c-.424.07-.764.384-.93.78s-.141.844.058 1.185l.46.764a1.14 1.14 0 01-.187 1.37l-.774.774a1.14 1.14 0 01-1.37.187l-.764-.46c-.34-.2-.79-.224-1.185-.058s-.71.506-.78.93l-.15.894c-.09.542-.56.94-1.109.94h-1.094c-.55 0-1.02-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93s-.844-.141-1.185.058l-.764.46a1.14 1.14 0 01-1.37-.187l-.774-.774a1.14 1.14 0 01-.187-1.37l.46-.764c.2-.34.224-.79.058-1.185s-.506-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.148c.424-.071.764-.384.93-.781s.141-.844-.058-1.185l-.46-.764a1.14 1.14 0 01.187-1.37l.774-.774a1.14 1.14 0 011.37-.187l.764.46c.34.2.79.224 1.185.058s.71-.506.78-.93l.15-.894zM15 12a3 3 0 11-6 0 3 3 0 016 0z' },
-};
-
-// SVG path constants for action icons
-const ICONS = {
-  // Arrow right (status_change)
-  arrow: 'M17.25 8.25L21 12m0 0l-3.75 3.75M21 12H3',
-  // Plus circle (create)
-  plus: 'M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z',
-  // Share / branch (decompose)
-  branch: 'M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5',
-  // Pencil (update)
-  pencil: 'M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125',
-  // Beaker (test_run / workflow_test)
-  beaker: 'M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.345 2.798H4.543c-1.376 0-2.345-1.798-1.345-2.798L5 14.5',
-  // Wrench (create_fix)
-  wrench: 'M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z',
-  // Check circle (workflow_fix_complete)
-  check: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-  // Exclamation triangle (escalate)
-  warning: 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z',
-  // Link (link_pr)
-  link: 'M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244',
-  // Circle dot (create_issue)
-  issue: 'M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-  // Code branch (commit_sync)
-  commit: 'M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5',
-  // Bolt (automation_triggered)
-  bolt: 'M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z',
-};
-
-const ACTION_CONFIG: Record<string, { label: string; icon: string; color: string; dotColor: string }> = {
-  status_change:          { label: '상태 변경',        icon: ICONS.arrow,   color: 'text-blue-400',    dotColor: 'bg-blue-500' },
-  create:                 { label: '생성',             icon: ICONS.plus,    color: 'text-emerald-400', dotColor: 'bg-emerald-500' },
-  decompose:              { label: '서브태스크 분해',    icon: ICONS.branch,  color: 'text-purple-400',  dotColor: 'bg-purple-500' },
-  update:                 { label: '업데이트',          icon: ICONS.pencil,  color: 'text-slate-400',   dotColor: 'bg-slate-500' },
-  test_run:               { label: '테스트 실행',        icon: ICONS.beaker,  color: 'text-violet-400',  dotColor: 'bg-violet-500' },
-  workflow_test:          { label: '워크플로우 테스트',  icon: ICONS.beaker,  color: 'text-violet-400',  dotColor: 'bg-violet-500' },
-  create_fix:             { label: '버그 수정 생성',     icon: ICONS.wrench,  color: 'text-orange-400',  dotColor: 'bg-orange-500' },
-  workflow_fix_complete:  { label: '수정 완료',          icon: ICONS.check,   color: 'text-green-400',   dotColor: 'bg-green-500' },
-  escalate:               { label: '에스컬레이션',       icon: ICONS.warning, color: 'text-red-400',     dotColor: 'bg-red-500' },
-  link_pr:                { label: 'PR 연결',           icon: ICONS.link,    color: 'text-cyan-400',    dotColor: 'bg-cyan-500' },
-  create_issue:           { label: 'Issue 생성',        icon: ICONS.issue,   color: 'text-cyan-400',    dotColor: 'bg-cyan-500' },
-  commit_sync:            { label: '커밋 동기화',        icon: ICONS.commit,  color: 'text-cyan-400',    dotColor: 'bg-cyan-500' },
-  automation_triggered:   { label: '자동화 실행',        icon: ICONS.bolt,    color: 'text-yellow-400',  dotColor: 'bg-yellow-500' },
-};
-
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  todo:        { bg: 'bg-indigo-500/20',  text: 'text-indigo-300' },
-  in_progress: { bg: 'bg-amber-500/20',   text: 'text-amber-300' },
-  testing:     { bg: 'bg-violet-500/20',  text: 'text-violet-300' },
-  fixing:      { bg: 'bg-orange-500/20',  text: 'text-orange-300' },
-  review:      { bg: 'bg-cyan-500/20',    text: 'text-cyan-300' },
-  done:        { bg: 'bg-green-500/20',   text: 'text-green-300' },
-  blocked:     { bg: 'bg-red-500/20',     text: 'text-red-300' },
-};
-
-const STATUS_DOTS: Record<string, string> = {
-  todo:        'bg-indigo-500',
-  in_progress: 'bg-amber-500',
-  testing:     'bg-violet-500',
-  fixing:      'bg-orange-500',
-  review:      'bg-cyan-500',
-  done:        'bg-green-500',
-  blocked:     'bg-red-500',
-};
-
-// Dot color for timeline: action-based first, then actor-based fallback
-const ACTOR_DOT_COLORS: Record<string, string> = {
-  ai:     'bg-violet-500',
-  system: 'bg-emerald-500',
-  github: 'bg-slate-500',
-  human:  'bg-blue-500',
-};
-
-interface TaskModalProps {
-  taskId: string;
-  onClose: () => void;
+interface FixHistory {
+  task: Task;
+  testRuns: { id: string; run_number: number; test_type: string; status: string; created_at: string }[];
+  fixAttempts: { id: string; attempt_number: number; fix_description: string | null; files_changed?: string[]; result_status: string; created_at: string }[];
+  summary: { totalRuns: number; totalFixes: number; lastResult: string | null };
 }
 
+/** Activities grouped by status stage */
+interface StageGroup {
+  status: string;
+  label: string;
+  icon: string;
+  activities: Activity[];
+  startTime: string;
+  endTime: string;
+  durationSeconds: number;
+  testFailCount: number;
+  fixCount: number;
+  passed: boolean;
+}
+
+/* ─────────────────────────────────────────────
+   Constants
+───────────────────────────────────────────── */
+const STATUS_ORDER = ['todo', 'in_progress', 'testing', 'fixing', 'review', 'done'];
+
+const STATUS_META: Record<string, { label: string; icon: string; color: string; bg: string; dotDone: string; dotFail: string }> = {
+  todo:        { label: 'todo',        icon: '\uD83D\uDCCB', color: 'text-indigo-300',  bg: 'bg-indigo-500/20',  dotDone: 'border-green-500 text-green-500', dotFail: '' },
+  in_progress: { label: 'in_progress', icon: '\u26A1',       color: 'text-amber-300',   bg: 'bg-amber-500/20',   dotDone: 'border-green-500 text-green-500', dotFail: '' },
+  testing:     { label: 'testing',     icon: '\uD83E\uDDEA', color: 'text-violet-300',  bg: 'bg-violet-500/20',  dotDone: 'border-green-500 text-green-500', dotFail: 'border-red-500 text-red-500' },
+  fixing:      { label: 'fixing',      icon: '\uD83D\uDD27', color: 'text-orange-300',  bg: 'bg-orange-500/20',  dotDone: 'border-green-500 text-green-500', dotFail: '' },
+  review:      { label: 'review',      icon: '\uD83D\uDC41\uFE0F', color: 'text-cyan-300',    bg: 'bg-cyan-500/20',    dotDone: 'border-green-500 text-green-500', dotFail: '' },
+  done:        { label: 'done',        icon: '\uD83C\uDF89', color: 'text-green-300',   bg: 'bg-green-500/20',   dotDone: 'border-green-500 text-green-500', dotFail: '' },
+  blocked:     { label: 'blocked',     icon: '\uD83D\uDEAB', color: 'text-red-300',     bg: 'bg-red-500/20',     dotDone: '', dotFail: 'border-red-500 text-red-500' },
+};
+
+/* ─────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────── */
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}초`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}분`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+function formatTimeRange(start: string, end: string): string {
+  const s = formatTime(start);
+  const e = formatTime(end);
+  return s === e ? s : `${s} – ${e}`;
+}
+
+/** Group activities by status transitions into stage cards */
+function buildStageGroups(activities: Activity[], task: Task): StageGroup[] {
+  if (activities.length === 0) return [];
+
+  // Sort ascending by time
+  const sorted = [...activities].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+  // Extract status flow from status_change activities
+  const statusChanges = sorted.filter(a => a.action === 'status_change' && a.payload);
+  const stages: { status: string; startTime: string; endTime: string }[] = [];
+
+  // Initial stage: 'todo' or from first status_change's 'from'
+  const firstFrom = statusChanges.length > 0 ? String(statusChanges[0].payload?.from ?? 'todo') : task.status;
+  stages.push({
+    status: firstFrom,
+    startTime: task.created_at,
+    endTime: statusChanges.length > 0 ? statusChanges[0].created_at : sorted[sorted.length - 1].created_at,
+  });
+
+  // Build stages from status changes
+  for (let i = 0; i < statusChanges.length; i++) {
+    const sc = statusChanges[i];
+    const toStatus = String(sc.payload?.to ?? 'unknown');
+    const startTime = sc.created_at;
+    const endTime = i + 1 < statusChanges.length ? statusChanges[i + 1].created_at : (task.completed_at ?? sorted[sorted.length - 1].created_at);
+    stages.push({ status: toStatus, startTime, endTime });
+  }
+
+  // Assign activities to their stage
+  return stages.map((stage) => {
+    const stageStart = new Date(stage.startTime).getTime();
+    const stageEnd = new Date(stage.endTime).getTime();
+    const meta = STATUS_META[stage.status] ?? STATUS_META.todo;
+
+    // Activities that belong to this stage (between start and end)
+    const stageActivities = sorted.filter(a => {
+      const t = new Date(a.created_at).getTime();
+      return t >= stageStart && t <= stageEnd;
+    });
+
+    // Count test failures and fixes
+    const testFailCount = stageActivities.filter(a =>
+      (a.action === 'test_run' || a.action === 'workflow_test') &&
+      a.payload && (a.payload.summary as Record<string, unknown>)?.fail
+    ).length;
+    const fixCount = stageActivities.filter(a => a.action === 'create_fix' || a.action === 'workflow_fix_complete').length;
+
+    const durationSeconds = Math.max(0, Math.floor((stageEnd - stageStart) / 1000));
+    const passed = stage.status === 'done' || (
+      stageActivities.some(a => a.action === 'status_change' && String(a.payload?.from) === stage.status)
+    );
+
+    return {
+      status: stage.status,
+      label: meta.label,
+      icon: meta.icon,
+      activities: stageActivities,
+      startTime: stage.startTime,
+      endTime: stage.endTime,
+      durationSeconds,
+      testFailCount,
+      fixCount,
+      passed,
+    };
+  });
+}
+
+/* ─────────────────────────────────────────────
+   Sub-components
+───────────────────────────────────────────── */
 function StatusBadge({ status }: { status: unknown }) {
   if (typeof status !== 'string') return null;
-  const style = STATUS_COLORS[status] ?? { bg: 'bg-slate-500/20', text: 'text-slate-300' };
+  const meta = STATUS_META[status];
+  const bg = meta?.bg ?? 'bg-slate-500/20';
+  const color = meta?.color ?? 'text-slate-300';
   return (
-    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${style.bg} ${style.text}`}>
+    <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded ${bg} ${color}`}>
       {status.replace(/_/g, ' ')}
     </span>
   );
 }
 
-function defaultPayloadRender(payload: Record<string, unknown>) {
+function Pill({ variant, children }: { variant: 'pass' | 'fail' | 'fix' | 'done'; children: React.ReactNode }) {
+  const styles = {
+    pass: 'bg-green-500/10 text-green-400 border-green-500/20',
+    fail: 'bg-red-500/10 text-red-400 border-red-500/20',
+    fix:  'bg-orange-500/10 text-orange-400 border-orange-500/20',
+    done: 'bg-green-500/10 text-green-400 border-green-500/20',
+  };
   return (
-    <div className="space-y-1">
-      {Object.entries(payload).map(([key, val]) => (
-        <div key={key} className="flex gap-2">
-          <span className="text-slate-500 shrink-0">{key}:</span>
-          <span className="text-slate-400 break-all">
-            {typeof val === 'string' ? val : JSON.stringify(val)}
-          </span>
-        </div>
-      ))}
-    </div>
+    <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-xl border ${styles[variant]}`}>
+      {children}
+    </span>
   );
 }
 
-function renderPayload(action: string, payload: Record<string, unknown> | null) {
+/** Render a single activity's content inside a stage card */
+function ActivityContent({ activity }: { activity: Activity }) {
+  const { action, payload } = activity;
   if (!payload) return null;
 
   switch (action) {
     case 'status_change': {
+      const notes = typeof payload.notes === 'string' ? payload.notes : null;
       return (
-        <div>
-          <div className="flex items-center gap-2">
-            <StatusBadge status={payload.from} />
-            <svg className="w-3 h-3 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 8.25L21 12m0 0l-3.75 3.75M21 12H3" />
-            </svg>
+        <div className="mt-2.5">
+          <div className="inline-flex items-center gap-2 bg-[#1A1D2E] border border-[#2e3348] rounded-md px-3 py-1.5 font-mono text-xs">
+            <span className="text-[#555e7a]">{String(payload.from ?? '')}</span>
+            <span className="text-[#555e7a]">&mdash;&blacktriangleright;</span>
             <StatusBadge status={payload.to} />
           </div>
-          {typeof payload.notes === 'string' && payload.notes && (
-            <p className="mt-1.5 text-slate-400 text-xs leading-relaxed">{payload.notes}</p>
-          )}
+          {notes && <p className="text-[11px] font-mono text-[#555e7a] mt-1.5">{notes}</p>}
         </div>
       );
     }
 
-    case 'commit_sync': {
-      const hash = typeof payload.commitHash === 'string' ? payload.commitHash : null;
-      const shortHash = hash ? hash.slice(0, 7) : null;
-      const notes = typeof payload.notes === 'string' ? payload.notes : null;
-      const message = typeof payload.message === 'string' ? payload.message : null;
+    case 'ai_analysis': {
+      const analysis = typeof payload.analysis === 'string' ? payload.analysis : null;
+      if (!analysis) return null;
       return (
-        <div>
-          {shortHash && (
-            <code className="text-cyan-300 bg-cyan-900/30 px-1.5 py-0.5 rounded font-mono text-[11px]">
-              {shortHash}
-            </code>
+        <div className="mt-3 bg-[rgba(108,143,255,0.05)] border border-[rgba(108,143,255,0.18)] border-l-[3px] border-l-[#6c8fff] rounded-lg px-3.5 py-2.5">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-[#6c8fff] mb-1.5 flex items-center gap-1.5">
+            <span>\uD83E\uDD16</span> AI \uBD84\uC11D
+          </div>
+          <div className="text-xs text-[#9198b4] leading-relaxed whitespace-pre-wrap">{analysis}</div>
+        </div>
+      );
+    }
+
+    case 'create': {
+      const type = typeof payload.type === 'string' ? payload.type : null;
+      const name = typeof payload.title === 'string' ? payload.title : typeof payload.name === 'string' ? payload.name : null;
+      return (
+        <div className="mt-2 text-xs text-[#9198b4]">
+          {type && <span className="text-green-400 font-mono mr-1">{type}</span>}
+          {name && <span>{name}</span>}
+        </div>
+      );
+    }
+
+    case 'decompose': {
+      const count = typeof payload.subtaskCount === 'number' ? payload.subtaskCount : null;
+      const ids = Array.isArray(payload.subtaskIds) ? payload.subtaskIds as string[] : null;
+      return (
+        <div className="mt-2">
+          {count != null && <span className="text-xs text-purple-300 font-mono">{count}\uAC1C \uC11C\uBE0C\uD0DC\uC2A4\uD06C\uB85C \uBD84\uD574</span>}
+          {ids && ids.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {ids.map((id, i) => (
+                <span key={i} className="text-[10px] bg-[#252a3a] border border-[#2e3348] text-[#9198b4] px-1.5 py-0.5 rounded font-mono">{id}</span>
+              ))}
+            </div>
           )}
-          {(notes || message) && (
-            <p className="mt-1 text-slate-400 text-xs">{notes ?? message}</p>
-          )}
-          {!shortHash && !notes && !message && defaultPayloadRender(payload)}
         </div>
       );
     }
 
     case 'test_run':
     case 'workflow_test': {
-      const summary = typeof payload.summary === 'object' && payload.summary !== null
-        ? payload.summary as Record<string, unknown>
-        : null;
-      const pass = summary ? Number(summary.pass ?? 0) : Number(payload.pass ?? 0);
-      const fail = summary ? Number(summary.fail ?? 0) : Number(payload.fail ?? 0);
-      const skip = summary ? Number(summary.skip ?? 0) : Number(payload.skip ?? 0);
-      const hasCount = pass > 0 || fail > 0 || skip > 0;
-      const notes = typeof payload.notes === 'string' ? payload.notes : null;
+      const summary = typeof payload.summary === 'object' && payload.summary ? payload.summary as Record<string, unknown> : null;
+      const pass = Number(summary?.pass ?? payload.pass ?? 0);
+      const fail = Number(summary?.fail ?? payload.fail ?? 0);
+      const skip = Number(summary?.skip ?? payload.skip ?? 0);
+      const results = Array.isArray(payload.results) ? payload.results as Record<string, unknown>[] : null;
+      const runNumber = typeof payload.runNumber === 'number' ? payload.runNumber : null;
+
       return (
-        <div>
-          {hasCount ? (
-            <div className="flex gap-3 text-xs">
-              <span className="text-green-400">&#10003; {pass} pass</span>
-              {fail > 0 && <span className="text-red-400">&#10007; {fail} fail</span>}
-              {skip > 0 && <span className="text-slate-500">&#8856; {skip} skip</span>}
+        <div className="mt-2.5">
+          {runNumber != null && (
+            <div className="text-[10px] font-mono font-semibold text-[#555e7a] mb-1.5 flex items-center gap-1.5">
+              <span className="bg-[#252a3a] border border-[#3a4060] text-[#9198b4] px-1.5 py-0.5 rounded">{runNumber}\uCC28 \uC2E4\uD589</span>
+              {fail > 0 ? (
+                <span className="text-red-400">&middot; {fail}/{pass + fail + skip} \uC2E4\uD328</span>
+              ) : (
+                <span className="text-green-400">&middot; \uC804\uCCB4 \uD1B5\uACFC</span>
+              )}
+            </div>
+          )}
+          {/* Individual test results */}
+          {results && results.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              {results.map((r, i) => {
+                const st = String(r.status ?? 'unknown');
+                const isFail = st === 'fail';
+                return (
+                  <div key={i} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs ${isFail ? 'border-red-500/20 bg-[#1A1D2E]' : 'border-[#2e3348] bg-[#1A1D2E]'}`}>
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${isFail ? 'bg-red-500/15 text-red-400' : 'bg-green-500/15 text-green-400'}`}>
+                      {isFail ? '\u2715' : '\u2713'}
+                    </span>
+                    <span className="text-[#9198b4] flex-1">{String(r.name ?? '')}</span>
+                    {r.duration_ms != null && (
+                      <span className="font-mono text-[10px] text-[#555e7a] min-w-[36px] text-right">{Number(r.duration_ms)}ms</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (pass > 0 || fail > 0) ? (
+            <div className="flex gap-3 text-xs font-mono">
+              <span className="text-green-400">\u2713 {pass} pass</span>
+              {fail > 0 && <span className="text-red-400">\u2715 {fail} fail</span>}
+              {skip > 0 && <span className="text-[#555e7a]">\u2298 {skip} skip</span>}
             </div>
           ) : null}
-          {notes && <p className="mt-1 text-slate-400 text-xs">{notes}</p>}
-          {!hasCount && !notes && defaultPayloadRender(payload)}
+        </div>
+      );
+    }
+
+    case 'error_detected': {
+      const message = typeof payload.message === 'string' ? payload.message : null;
+      const errorType = typeof payload.error_type === 'string' ? payload.error_type : null;
+      const stack = typeof payload.stack === 'string' ? payload.stack : null;
+      return (
+        <div className="mt-2.5 bg-[#0f1117] border border-red-500/18 border-l-2 border-l-red-500 rounded-md px-3 py-2 font-mono text-[11px] leading-relaxed">
+          {errorType && <div className="text-red-400 font-semibold mb-0.5">{errorType}</div>}
+          {message && <div className="text-red-400">\u2715 {message}</div>}
+          {stack && <div className="text-[#555e7a] mt-1 whitespace-pre-wrap">{stack}</div>}
         </div>
       );
     }
@@ -197,21 +296,73 @@ function renderPayload(action: string, payload: Record<string, unknown> | null) 
       const fixTaskId = typeof payload.fixTaskId === 'string' ? payload.fixTaskId : null;
       const filesChanged = Array.isArray(payload.filesChanged) ? payload.filesChanged as string[] : null;
       return (
-        <div>
-          {description && <p className="text-slate-300 text-xs">{description}</p>}
-          {fixTaskId && (
-            <p className="mt-1 text-xs text-slate-500">
-              수정 태스크: <span className="font-mono text-orange-300">{fixTaskId}</span>
-            </p>
-          )}
+        <div className="mt-2.5 bg-[rgba(245,146,90,0.04)] border border-[rgba(245,146,90,0.2)] border-l-[3px] border-l-[#f5925a] rounded-lg px-3.5 py-2.5">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-[#f5925a] mb-1.5">\uD83E\uDD16 \uC218\uC815 \uC774\uC720</div>
+          {description && <div className="text-xs text-[#9198b4] leading-relaxed">{description}</div>}
+          {fixTaskId && <div className="mt-1 text-[10px] text-[#555e7a]">\uC218\uC815 \uD0DC\uC2A4\uD06C: <span className="font-mono text-orange-300">{fixTaskId}</span></div>}
           {filesChanged && filesChanged.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
               {filesChanged.map((f, i) => (
-                <span key={i} className="text-[10px] bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded font-mono">{f}</span>
+                <span key={i} className="text-[10px] bg-[#252a3a] text-[#9198b4] px-1.5 py-0.5 rounded font-mono">{f}</span>
               ))}
             </div>
           )}
-          {!description && !fixTaskId && !filesChanged && defaultPayloadRender(payload)}
+        </div>
+      );
+    }
+
+    case 'workflow_fix_complete': {
+      const notes = typeof payload.notes === 'string' ? payload.notes : null;
+      return (
+        <div className="mt-2.5 bg-[rgba(62,207,142,0.04)] border border-[rgba(62,207,142,0.2)] border-l-[3px] border-l-green-400 rounded-lg px-3.5 py-2.5">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-green-400 mb-1">\u2705 \uC218\uC815 \uC644\uB8CC</div>
+          {notes && <div className="text-xs text-[#9198b4]">{notes}</div>}
+        </div>
+      );
+    }
+
+    case 'code_change': {
+      const desc = typeof payload.description === 'string' ? payload.description : null;
+      const files = Array.isArray(payload.files) ? payload.files as Record<string, unknown>[] : null;
+      const diffSummary = typeof payload.diff_summary === 'string' ? payload.diff_summary : null;
+      return (
+        <div className="mt-2.5">
+          {desc && <div className="text-xs text-[#9198b4] mb-2">{desc}</div>}
+          {files && files.length > 0 && (
+            <div className="bg-[#0f1117] border border-[#2e3348] rounded-lg overflow-hidden">
+              {files.map((f, i) => (
+                <div key={i} className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono border-b border-[#2e3348] last:border-b-0">
+                  <span className="text-[#9198b4] font-semibold flex-1">{String(f.path ?? '')}</span>
+                  {f.additions != null && <span className="text-green-400">+{Number(f.additions)}</span>}
+                  {f.deletions != null && <span className="text-red-400">-{Number(f.deletions)}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          {diffSummary && (
+            <pre className="mt-2 bg-[#0f1117] border border-[#2e3348] rounded-lg p-3 text-[11px] font-mono text-[#9198b4] leading-relaxed overflow-x-auto whitespace-pre-wrap">{diffSummary}</pre>
+          )}
+        </div>
+      );
+    }
+
+    case 'commit_sync': {
+      const hash = typeof payload.commitHash === 'string' ? payload.commitHash : null;
+      const message = typeof payload.message === 'string' ? payload.message : typeof payload.notes === 'string' ? payload.notes : null;
+      const additions = typeof payload.additions === 'number' ? payload.additions : null;
+      const deletions = typeof payload.deletions === 'number' ? payload.deletions : null;
+      const filesChanged = Array.isArray(payload.files_changed) ? payload.files_changed as string[] : null;
+      return (
+        <div className="mt-2.5 bg-[#1A1D2E] border border-[#2e3348] rounded-lg px-3 py-2.5 font-mono text-[11px] leading-relaxed">
+          {message && <div className="text-[#f5c842] font-semibold mb-0.5">{message}</div>}
+          {hash && <div className="text-[#555e7a]">{hash.slice(0, 7)}</div>}
+          {(additions != null || deletions != null) && (
+            <div className="text-green-400 mt-0.5">
+              {additions != null && <span>+{additions}</span>}
+              {deletions != null && <span className="text-red-400 ml-1">-{deletions}</span>}
+              {filesChanged && <span className="text-[#555e7a] ml-1">&middot; {filesChanged.length} files changed</span>}
+            </div>
+          )}
         </div>
       );
     }
@@ -220,128 +371,186 @@ function renderPayload(action: string, payload: Record<string, unknown> | null) 
       const reason = typeof payload.reason === 'string' ? payload.reason : null;
       const attempts = typeof payload.attempts === 'number' ? payload.attempts : null;
       return (
-        <div className="bg-red-900/20 border border-red-800/30 rounded px-3 py-2">
-          {reason && <p className="text-red-200 text-xs leading-relaxed">{reason}</p>}
-          {attempts != null && (
-            <p className="mt-1 text-red-400 text-[10px]">{attempts}회 시도 후 에스컬레이션</p>
-          )}
-          {!reason && !attempts && defaultPayloadRender(payload)}
+        <div className="mt-2.5 bg-[rgba(241,107,107,0.04)] border border-[rgba(241,107,107,0.2)] border-l-[3px] border-l-red-500 rounded-lg px-3.5 py-2.5">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-red-400 mb-1">\u26A0\uFE0F \uC5D0\uC2A4\uCEEC\uB808\uC774\uC158</div>
+          {reason && <div className="text-xs text-red-200 leading-relaxed">{reason}</div>}
+          {attempts != null && <div className="mt-1 text-[10px] text-red-400">{attempts}\uD68C \uC2DC\uB3C4 \uD6C4</div>}
         </div>
       );
     }
 
     case 'link_pr': {
       const prUrl = typeof payload.prUrl === 'string' ? payload.prUrl : null;
-      if (!prUrl) return defaultPayloadRender(payload);
-      const prNumber = prUrl.split('/').pop();
+      if (!prUrl) return null;
       return (
-        <a href={prUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:text-cyan-300 text-xs underline underline-offset-2">
-          PR #{prNumber}
-        </a>
+        <div className="mt-2 text-xs">
+          <a href={prUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 font-mono">
+            PR #{prUrl.split('/').pop()}
+          </a>
+        </div>
       );
     }
 
     case 'create_issue': {
       const issueUrl = typeof payload.issueUrl === 'string' ? payload.issueUrl : null;
-      const issueNumber = typeof payload.issueNumber === 'number' || typeof payload.issueNumber === 'string'
-        ? payload.issueNumber
-        : null;
-      if (!issueUrl) return defaultPayloadRender(payload);
+      const issueNumber = typeof payload.issueNumber === 'number' || typeof payload.issueNumber === 'string' ? payload.issueNumber : null;
+      if (!issueUrl) return null;
       return (
-        <a href={issueUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:text-cyan-300 text-xs underline underline-offset-2">
-          Issue #{issueNumber ?? issueUrl.split('/').pop()}
-        </a>
-      );
-    }
-
-    case 'create': {
-      const type = typeof payload.type === 'string' ? payload.type : null;
-      const name = typeof payload.title === 'string'
-        ? payload.title
-        : typeof payload.name === 'string'
-          ? payload.name
-          : null;
-      if (!type && !name) return defaultPayloadRender(payload);
-      return (
-        <span className="text-xs text-slate-300">
-          {type && <span className="text-emerald-400 mr-1">{type}</span>}
-          {name}
-        </span>
-      );
-    }
-
-    case 'decompose': {
-      const count = typeof payload.subtaskCount === 'number' ? payload.subtaskCount : null;
-      const notes = typeof payload.notes === 'string' ? payload.notes : null;
-      return (
-        <div>
-          {count != null && (
-            <span className="text-xs text-purple-300">{count}개 서브태스크로 분해</span>
-          )}
-          {notes && <p className="mt-1 text-slate-400 text-xs">{notes}</p>}
-          {count == null && !notes && defaultPayloadRender(payload)}
+        <div className="mt-2 text-xs">
+          <a href={issueUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 font-mono">
+            Issue #{issueNumber ?? issueUrl.split('/').pop()}
+          </a>
         </div>
       );
     }
 
     case 'update': {
       const field = typeof payload.field === 'string' ? payload.field : null;
-      const from = payload.from;
-      const to = payload.to;
-      if (!field) return defaultPayloadRender(payload);
+      if (!field) return null;
       return (
-        <span className="text-xs text-slate-400">
-          <span className="text-slate-500">{field}:</span>{' '}
-          <span className="text-slate-400">{String(from ?? '—')}</span>
-          {' '}
-          <span className="text-slate-600">&#8594;</span>
-          {' '}
-          <span className="text-slate-300">{String(to ?? '—')}</span>
-        </span>
-      );
-    }
-
-    case 'workflow_fix_complete': {
-      const notes = typeof payload.notes === 'string' ? payload.notes : null;
-      const fixTaskId = typeof payload.fixTaskId === 'string' ? payload.fixTaskId : null;
-      return (
-        <div>
-          {fixTaskId && (
-            <p className="text-xs text-green-300">
-              수정 태스크 완료: <span className="font-mono">{fixTaskId}</span>
-            </p>
-          )}
-          {notes && <p className="mt-1 text-slate-400 text-xs">{notes}</p>}
-          {!fixTaskId && !notes && defaultPayloadRender(payload)}
+        <div className="mt-2 text-xs font-mono text-[#9198b4]">
+          <span className="text-[#555e7a]">{field}:</span>{' '}
+          {String(payload.from ?? '\u2014')} <span className="text-[#555e7a]">\u2192</span> {String(payload.to ?? '\u2014')}
         </div>
       );
     }
 
-    case 'automation_triggered': {
-      const name = typeof payload.name === 'string' ? payload.name : null;
-      const trigger = typeof payload.trigger === 'string' ? payload.trigger : null;
-      const notes = typeof payload.notes === 'string' ? payload.notes : null;
+    default: {
+      // Fallback: render payload as key-value
       return (
-        <div>
-          {name && <span className="text-xs text-yellow-300 font-medium">{name}</span>}
-          {trigger && <span className="text-xs text-slate-500 ml-2">({trigger})</span>}
-          {notes && <p className="mt-1 text-slate-400 text-xs">{notes}</p>}
-          {!name && !trigger && !notes && defaultPayloadRender(payload)}
+        <div className="mt-2 space-y-0.5">
+          {Object.entries(payload).map(([key, val]) => (
+            <div key={key} className="flex gap-2 text-xs">
+              <span className="text-[#555e7a] shrink-0 font-mono">{key}:</span>
+              <span className="text-[#9198b4] break-all">{typeof val === 'string' ? val : JSON.stringify(val)}</span>
+            </div>
+          ))}
         </div>
       );
     }
-
-    default:
-      return defaultPayloadRender(payload);
   }
+}
+
+/* ─────────────────────────────────────────────
+   Stage Card (Accordion)
+───────────────────────────────────────────── */
+function StageCard({ stage, index, isOpen, onToggle }: {
+  stage: StageGroup;
+  index: number;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const meta = STATUS_META[stage.status] ?? STATUS_META.todo;
+  const iconBgMap: Record<string, string> = {
+    todo: 'bg-[rgba(136,145,176,0.1)]',
+    in_progress: 'bg-[rgba(108,143,255,0.12)]',
+    testing: 'bg-[rgba(245,200,66,0.1)]',
+    fixing: 'bg-[rgba(245,146,90,0.12)]',
+    review: 'bg-[rgba(108,143,255,0.12)]',
+    done: 'bg-[rgba(62,207,142,0.1)]',
+  };
+
+  // Filter out status_change for display (it's shown as the transition arrow)
+  const contentActivities = stage.activities.filter(a => a.action !== 'status_change');
+  // status_change activities for transition display
+  const statusChanges = stage.activities.filter(a => a.action === 'status_change');
+
+  return (
+    <div
+      className="border border-[#2e3348] rounded-xl overflow-hidden hover:border-[#3a4060] transition-colors"
+      style={{ animationDelay: `${index * 0.04}s` }}
+    >
+      {/* Card Head */}
+      <div
+        onClick={onToggle}
+        className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer bg-[#1A1D2E] hover:bg-[#1E2135] transition-colors select-none"
+      >
+        <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm shrink-0 ${iconBgMap[stage.status] ?? iconBgMap.todo}`}>
+          {stage.icon}
+        </div>
+        <span className="text-[13px] font-semibold font-mono text-[#e8ecf4]">{stage.label}</span>
+        <span className="text-[10px] font-mono text-[#555e7a]">{formatTimeRange(stage.startTime, stage.endTime)}</span>
+        <span className="text-[10px] font-mono text-[#555e7a] bg-[#252a3a] border border-[#2e3348] px-2 py-0.5 rounded-xl">
+          {stage.status === 'done' ? '\uC644\uB8CC' : stage.durationSeconds > 0 ? formatDuration(stage.durationSeconds) : '\uC0DD\uC131'}
+        </span>
+        {stage.testFailCount > 0 && <Pill variant="fail">{stage.testFailCount}\uD68C \uC2E4\uD328</Pill>}
+        {stage.fixCount > 0 && <Pill variant="fix">{stage.fixCount}\uD68C \uC218\uC815</Pill>}
+        {stage.status === 'done' && <Pill variant="done">done</Pill>}
+        {stage.status === 'testing' && stage.testFailCount === 0 && stage.passed && <Pill variant="pass">\uC804\uCCB4 \uD1B5\uACFC</Pill>}
+        <span className={`text-[#555e7a] text-[10px] ml-auto shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}>
+          \u25BE
+        </span>
+      </div>
+
+      {/* Card Body (collapsible) */}
+      <div className={`overflow-hidden transition-all duration-300 ${isOpen ? 'max-h-[2000px]' : 'max-h-0'}`}>
+        <div className="px-4 pb-4 border-t border-[#2e3348]">
+          {/* Content activities */}
+          {contentActivities.map((act) => (
+            <ActivityContent key={act.id} activity={act} />
+          ))}
+
+          {/* Status transition arrows */}
+          {statusChanges.map((sc) => (
+            <ActivityContent key={sc.id} activity={sc} />
+          ))}
+
+          {/* If no activities to show, show empty state */}
+          {contentActivities.length === 0 && statusChanges.length === 0 && (
+            <div className="text-xs text-[#555e7a] mt-3 font-mono">\uAE30\uB85D\uB41C \uD65C\uB3D9 \uC5C6\uC74C</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Stage Flow Bar
+───────────────────────────────────────────── */
+function StageFlowBar({ stages, onStageClick }: { stages: StageGroup[]; onStageClick: (index: number) => void }) {
+  return (
+    <div className="flex items-start gap-0 px-6 py-3.5 border-b border-[#2e3348] overflow-x-auto scrollbar-hide">
+      {stages.map((stage, i) => {
+        const hasFails = stage.testFailCount > 0;
+        const isDone = stage.passed;
+        return (
+          <div key={i} className="flex items-start shrink-0">
+            {i > 0 && <div className="w-6 h-px bg-green-500/30 mt-[13px] shrink-0" />}
+            <div className="flex flex-col items-center gap-1.5 cursor-pointer" onClick={() => onStageClick(i)}>
+              <div className={`w-[26px] h-[26px] rounded-full flex items-center justify-center text-[10px] font-mono font-bold border-[1.5px] shrink-0 ${
+                hasFails ? 'border-red-500 text-red-500 bg-red-500/15' : isDone ? 'border-green-500 text-green-500 bg-green-500/15' : 'border-[#3a4060] text-[#555e7a] bg-transparent'
+              }`}>
+                {hasFails ? '\u2715' : isDone ? '\u2713' : (i + 1)}
+              </div>
+              <div className="text-[9px] font-mono text-[#555e7a] whitespace-nowrap text-center leading-tight">
+                {stage.label}
+                {hasFails && <><br /><span className="text-red-400">\u00D7{stage.testFailCount} \uC2E4\uD328</span></>}
+                {stage.fixCount > 0 && <><br /><span className="text-orange-400">\u00D7{stage.fixCount}</span></>}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   Main Modal Component
+───────────────────────────────────────────── */
+interface TaskModalProps {
+  taskId: string;
+  onClose: () => void;
 }
 
 export default function TaskModal({ taskId, onClose }: TaskModalProps) {
   const [task, setTask] = useState<Task | null>(null);
   const [subtasks, setSubtasks] = useState<Task[]>([]);
-  const [fixHistory, setFixHistory] = useState<FixHistory | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [fixHistory, setFixHistory] = useState<FixHistory | null>(null);
   const [loading, setLoading] = useState(true);
+  const [openCards, setOpenCards] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     async function load() {
@@ -349,12 +558,15 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
         const [taskData, historyData, activityData] = await Promise.all([
           api.getTask(taskId),
           api.getFixHistory(taskId).catch(() => null),
-          api.listActivities({ task_id: taskId, limit: '50' }).catch(() => ({ activities: [] })),
+          api.listActivities({ task_id: taskId, limit: '100' }).catch(() => ({ activities: [] })),
         ]);
         setTask(taskData.task);
         setSubtasks(taskData.subtasks);
         setFixHistory(historyData as FixHistory | null);
         setActivities(activityData.activities as Activity[]);
+        // Open all cards by default
+        const stageCount = buildStageGroups(activityData.activities as Activity[], taskData.task).length;
+        setOpenCards(new Set(Array.from({ length: stageCount }, (_, i) => i)));
       } catch {
         /* handled by !task check */
       } finally {
@@ -364,244 +576,190 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
     load();
   }, [taskId]);
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  // Prevent body scroll when modal is open
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
   }, []);
 
-  const statusStyle = task ? STATUS_COLORS[task.status] ?? { bg: 'bg-slate-500/20', text: 'text-slate-300' } : { bg: '', text: '' };
+  const toggleCard = useCallback((index: number) => {
+    setOpenCards(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }, []);
+
+  const stages = task ? buildStageGroups(activities, task) : [];
+
+  // Compute stats
+  const totalDuration = stages.reduce((sum, s) => sum + s.durationSeconds, 0);
+  const totalFixes = stages.reduce((sum, s) => sum + s.fixCount, 0);
+  const totalTestFails = stages.reduce((sum, s) => sum + s.testFailCount, 0);
+
+  const statusStyle = task ? STATUS_META[task.status] ?? STATUS_META.todo : STATUS_META.todo;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh]" onClick={onClose}>
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
 
-      {/* Modal */}
       <div
-        className="relative w-full max-w-2xl max-h-[75vh] overflow-y-auto bg-[#12141F] border border-slate-700/60 rounded-xl shadow-2xl"
+        className="relative w-full max-w-[780px] max-h-[90vh] flex flex-col bg-[#171923] border border-[#2e3348] rounded-xl shadow-[0_28px_80px_rgba(0,0,0,0.6)] animate-[modal-in_0.2s_ease]"
         onClick={(e) => e.stopPropagation()}
       >
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="w-6 h-6 border-2 border-slate-600 border-t-indigo-400 rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-[#2e3348] border-t-[#6c8fff] rounded-full animate-spin" />
           </div>
         ) : !task ? (
-          <div className="text-center py-20 text-red-400">데이터를 불러올 수 없습니다</div>
+          <div className="text-center py-20 text-red-400">\uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC62C \uC218 \uC5C6\uC2B5\uB2C8\uB2E4</div>
         ) : (
           <>
-            {/* Header */}
-            <div className="sticky top-0 bg-[#12141F] border-b border-slate-700/40 px-6 py-4 flex items-start justify-between z-10">
-              <div className="flex-1 min-w-0 pr-4">
-                <div className="flex items-center gap-2 mb-2">
-                  {task.ticket_code && (
-                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-indigo-900/50 text-indigo-300 border border-indigo-700/30">
-                      {task.ticket_code}
-                    </span>
-                  )}
-                  <span className={`text-xs font-medium px-2.5 py-1 rounded-md ${statusStyle.bg} ${statusStyle.text}`}>
-                    {task.status.replace('_', ' ')}
+            {/* ── HEADER ── */}
+            <div className="px-6 pt-5 pb-0 shrink-0">
+              <div className="flex items-center gap-2.5 mb-2.5">
+                {task.ticket_code && (
+                  <span className="font-mono text-[13px] font-semibold text-[#9198b4] bg-[#1A1D2E] border border-[#3a4060] px-2.5 py-0.5 rounded-md">
+                    {task.ticket_code}
                   </span>
-                  <span className="text-xs text-slate-500">P{task.priority}</span>
-                  <span className="text-xs text-slate-600">{new Date(task.created_at).toLocaleDateString('ko-KR')}</span>
-                </div>
-                <h2 className="text-lg font-semibold text-slate-100 leading-tight">{task.title}</h2>
+                )}
+                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-md border ${
+                  task.status === 'done'
+                    ? 'bg-green-500/15 text-green-400 border-green-500/25'
+                    : `${statusStyle.bg} ${statusStyle.color} border-transparent`
+                }`}>
+                  {task.status.replace(/_/g, ' ')}
+                </span>
+                <span className="font-mono text-[11px] font-semibold text-[#555e7a]">P{task.priority}</span>
+                <span className="text-xs text-[#555e7a]">{new Date(task.created_at).toLocaleDateString('ko-KR')}</span>
+                <button
+                  onClick={onClose}
+                  className="ml-auto w-7 h-7 rounded-md flex items-center justify-center text-[#555e7a] hover:bg-[#1A1D2E] hover:text-[#e8ecf4] transition-colors"
+                >
+                  \u2715
+                </button>
               </div>
-              <button
-                onClick={onClose}
-                className="text-slate-500 hover:text-slate-300 transition-colors p-1 -mr-1 -mt-1"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <h2 className="text-xl font-semibold text-[#e8ecf4] leading-tight tracking-tight mb-4">{task.title}</h2>
             </div>
 
-            {/* Body */}
-            <div className="px-6 py-5 space-y-5">
+            {/* ── META GRID ── */}
+            <div className="grid grid-cols-3 gap-0 px-6 py-3.5 border-y border-[#2e3348] shrink-0">
+              <MetaItem label="Assignee" value={task.assignee} />
+              <MetaItem label="Created By" value={task.created_by} />
+              <MetaItem label="Priority" value={`P${task.priority}`} />
+              {task.completed_at && <MetaItem label="Completed" value={new Date(task.completed_at).toLocaleDateString('ko-KR')} className="mt-2.5" />}
+              {totalDuration > 0 && <MetaItem label="\uC18C\uC694 \uC2DC\uAC04" value={formatDuration(totalDuration)} className="mt-2.5" />}
+              {totalFixes > 0 && <MetaItem label="\uC218\uC815 \uD69F\uC218" value={`${totalFixes}\uD68C`} className="mt-2.5" highlight />}
+            </div>
+
+            {/* ── STAGE FLOW BAR ── */}
+            {stages.length > 0 && (
+              <StageFlowBar
+                stages={stages}
+                onStageClick={(i) => {
+                  setOpenCards(prev => new Set(prev).add(i));
+                  document.getElementById(`stage-card-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              />
+            )}
+
+            {/* ── BODY ── */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 scroll-smooth" style={{ scrollbarWidth: 'thin', scrollbarColor: '#3a4060 transparent' }}>
               {/* Description */}
               {task.description && (
-                <p className="text-sm text-slate-400 leading-relaxed">{task.description}</p>
-              )}
-
-              {/* Info grid */}
-              <div className="grid grid-cols-3 gap-4">
-                <InfoItem label="Assignee" value={task.assignee} />
-                <InfoItem label="Created by" value={task.created_by} />
-                <InfoItem label="Priority" value={`P${task.priority}`} />
-                {task.estimated_hrs != null && <InfoItem label="Estimated" value={`${task.estimated_hrs}h`} />}
-                {task.actual_hrs != null && <InfoItem label="Actual" value={`${task.actual_hrs}h`} />}
-                {task.completed_at && <InfoItem label="Completed" value={new Date(task.completed_at).toLocaleDateString('ko-KR')} />}
-              </div>
-
-              {/* Blocked warning */}
-              {task.blocked_by && (
-                <div className="flex items-center gap-2 bg-red-900/30 border border-red-800/40 rounded-lg px-4 py-3">
-                  <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                  </svg>
-                  <span className="text-sm text-red-300">Blocked: {task.blocked_by}</span>
-                </div>
-              )}
-
-              {/* GitHub links */}
-              {(task.github_pr || task.github_issue) && (
-                <div className="flex gap-3">
-                  {task.github_pr && (
-                    <a href={task.github_pr} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.172 13.828a4 4 0 015.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101" />
-                      </svg>
-                      PR #{task.github_pr.split('/').pop()}
-                    </a>
-                  )}
-                  {task.github_issue && (
-                    <a href={task.github_issue} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Issue #{task.github_issue.split('/').pop()}
-                    </a>
-                  )}
-                </div>
+                <p className="text-sm text-[#9198b4] leading-relaxed mb-5">{task.description}</p>
               )}
 
               {/* Subtasks */}
               {subtasks.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-300 mb-3">
-                    Subtasks ({subtasks.filter(s => s.status === 'done').length}/{subtasks.length})
-                  </h3>
-                  <div className="space-y-1.5">
+                <div className="mb-5">
+                  <div className="text-[11px] font-semibold text-[#555e7a] uppercase tracking-wider mb-2.5 flex items-center gap-2">
+                    Subtasks
+                    <span className="text-[10px] font-mono bg-[#252a3a] border border-[#3a4060] text-[#9198b4] px-1.5 py-0.5 rounded-xl">
+                      {subtasks.filter(s => s.status === 'done').length}/{subtasks.length}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1">
                     {subtasks.map((sub) => (
-                      <div
-                        key={sub.id}
-                        className="flex items-center gap-2.5 text-sm py-1.5 px-3 rounded-md bg-slate-800/40"
-                      >
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOTS[sub.status] ?? 'bg-slate-500'}`} />
-                        <span className={`flex-1 ${sub.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
-                          {sub.title}
-                        </span>
-                        <span className="text-[10px] text-slate-500 capitalize">{sub.status.replace('_', ' ')}</span>
+                      <div key={sub.id} className="flex items-center gap-2 px-2.5 py-1.5 bg-[#1A1D2E] border border-[#2e3348] rounded-md text-xs text-[#9198b4]">
+                        <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 ${
+                          sub.status === 'done' ? 'bg-green-500' : 'border-[1.5px] border-[#3a4060]'
+                        }`}>
+                          {sub.status === 'done' && (
+                            <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5l2 2L7.5 2.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                          )}
+                        </div>
+                        <span className={sub.status === 'done' ? 'text-[#555e7a] line-through' : ''}>{sub.title}</span>
+                        {sub.ticket_code && <span className="ml-auto font-mono text-[9px] text-[#555e7a]">{sub.ticket_code}</span>}
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Activity Log */}
-              <div>
-                <h3 className="text-sm font-semibold text-slate-300 mb-3">
-                  활동 로그 ({activities.length})
-                </h3>
-                {activities.length === 0 ? (
-                  <div className="text-xs text-slate-500 bg-slate-800/30 rounded-lg px-4 py-6 text-center">
-                    아직 활동 기록이 없습니다
+              {/* Stage Cards */}
+              {stages.length > 0 ? (
+                <>
+                  <div className="text-[11px] font-semibold text-[#555e7a] uppercase tracking-wider mb-3 flex items-center gap-2">
+                    \uD65C\uB3D9 \uB0B4\uC5ED
+                    <span className="text-[10px] font-mono bg-[#252a3a] border border-[#3a4060] text-[#9198b4] px-1.5 py-0.5 rounded-xl">
+                      {stages.length} \uB2E8\uACC4
+                    </span>
                   </div>
-                ) : (
-                  <div className="relative pl-4 border-l border-slate-700/60 space-y-3">
-                    {activities.map((act) => {
-                      const actor = ACTOR_CONFIG[act.actor] ?? ACTOR_CONFIG.human;
-                      const actionCfg = ACTION_CONFIG[act.action];
-                      const dotColor = actionCfg?.dotColor ?? ACTOR_DOT_COLORS[act.actor] ?? 'bg-slate-500';
-                      const actionColor = actionCfg?.color ?? actor.color;
-                      const actionLabel = actionCfg?.label ?? act.action;
-                      const actionIcon = actionCfg?.icon ?? actor.icon;
-                      return (
-                        <div key={act.id} className="relative">
-                          {/* Timeline dot — action-based color */}
-                          <div className={`absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full border-2 border-[#12141F] ${dotColor}`} />
-                          <div className="bg-slate-800/30 rounded-lg px-3.5 py-2.5">
-                            {/* Header row: action icon + label, actor, timestamp */}
-                            <div className="flex items-center gap-2 mb-1">
-                              {/* Action icon + label */}
-                              <svg className={`w-3.5 h-3.5 ${actionColor} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d={actionIcon} />
-                              </svg>
-                              <span className={`text-xs font-semibold ${actionColor}`}>{actionLabel}</span>
-                              {/* Actor separator + actor label */}
-                              <span className="text-slate-700 text-xs">·</span>
-                              <svg className={`w-3 h-3 ${actor.color} shrink-0`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d={actor.icon} />
-                              </svg>
-                              <span className={`text-[11px] ${actor.color}`}>{actor.label}</span>
-                              <span className="text-[10px] text-slate-600 ml-auto">{new Date(act.created_at).toLocaleString('ko-KR')}</span>
-                            </div>
-                            {/* Payload */}
-                            {act.payload && (
-                              <div className="ml-[22px] text-xs">
-                                {renderPayload(act.action, act.payload)}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="flex flex-col gap-2">
+                    {stages.map((stage, i) => (
+                      <div key={i} id={`stage-card-${i}`}>
+                        <StageCard
+                          stage={stage}
+                          index={i}
+                          isOpen={openCards.has(i)}
+                          onToggle={() => toggleCard(i)}
+                        />
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
+                </>
+              ) : (
+                <div className="text-xs text-[#555e7a] bg-[#1A1D2E] rounded-lg px-4 py-6 text-center">
+                  \uC544\uC9C1 \uD65C\uB3D9 \uAE30\uB85D\uC774 \uC5C6\uC2B5\uB2C8\uB2E4
+                </div>
+              )}
 
-              {/* Test & Fix History */}
+              {/* Test & Fix History (from fix-history API) */}
               {fixHistory && (fixHistory.testRuns.length > 0 || fixHistory.fixAttempts.length > 0) && (
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-300 mb-3">Test & Fix History</h3>
-                  <div className="bg-slate-800/30 rounded-lg p-4 space-y-4">
-                    <div className="flex gap-4 text-xs text-slate-500">
+                <div className="mt-5">
+                  <div className="text-[11px] font-semibold text-[#555e7a] uppercase tracking-wider mb-3">Test & Fix History</div>
+                  <div className="bg-[#1A1D2E] rounded-lg p-4 space-y-3 border border-[#2e3348]">
+                    <div className="flex gap-4 text-xs font-mono text-[#555e7a]">
                       <span>Runs: {fixHistory.summary.totalRuns}</span>
                       <span>Fixes: {fixHistory.summary.totalFixes}</span>
                       <span>Last: {fixHistory.summary.lastResult ?? 'N/A'}</span>
                     </div>
-
-                    {fixHistory.testRuns.length > 0 && (
-                      <div className="space-y-1.5">
-                        <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wider">Test Runs</h4>
-                        {fixHistory.testRuns.slice(0, 5).map((run) => (
-                          <div key={run.id} className="flex items-center gap-2.5 text-xs">
-                            <span className={`w-1.5 h-1.5 rounded-full ${run.status === 'pass' ? 'bg-green-500' : 'bg-red-500'}`} />
-                            <span className="text-slate-400">#{run.run_number}</span>
-                            <span className="text-slate-300">{run.test_type}</span>
-                            <span className={run.status === 'pass' ? 'text-green-400' : 'text-red-400'}>{run.status}</span>
-                            <span className="text-slate-600 ml-auto">{new Date(run.created_at).toLocaleString('ko-KR')}</span>
-                          </div>
-                        ))}
+                    {fixHistory.testRuns.slice(0, 5).map((run) => (
+                      <div key={run.id} className="flex items-center gap-2 text-xs">
+                        <span className={`w-1.5 h-1.5 rounded-full ${run.status === 'pass' ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <span className="text-[#555e7a] font-mono">#{run.run_number}</span>
+                        <span className="text-[#9198b4]">{run.test_type}</span>
+                        <span className={run.status === 'pass' ? 'text-green-400' : 'text-red-400'}>{run.status}</span>
+                        <span className="text-[#555e7a] font-mono ml-auto text-[10px]">{new Date(run.created_at).toLocaleString('ko-KR')}</span>
                       </div>
-                    )}
-
-                    {fixHistory.fixAttempts.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-xs font-medium text-slate-500 uppercase tracking-wider">Fix Attempts</h4>
-                        {fixHistory.fixAttempts.map((attempt) => (
-                          <div key={attempt.id} className="bg-slate-800/60 rounded-md p-3 text-xs">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className={`w-1.5 h-1.5 rounded-full ${attempt.result_status === 'pass' ? 'bg-green-500' : attempt.result_status === 'fail' ? 'bg-red-500' : 'bg-orange-500'}`} />
-                              <span className="text-slate-300 font-medium">Attempt #{attempt.attempt_number}</span>
-                              <span className={attempt.result_status === 'pass' ? 'text-green-400' : attempt.result_status === 'fail' ? 'text-red-400' : 'text-orange-400'}>
-                                {attempt.result_status}
-                              </span>
-                              <span className="text-slate-600 ml-auto">{new Date(attempt.created_at).toLocaleString('ko-KR')}</span>
-                            </div>
-                            {attempt.fix_description && (
-                              <p className="text-slate-400 ml-3.5">{attempt.fix_description}</p>
-                            )}
-                            {attempt.files_changed && Array.isArray(attempt.files_changed) && attempt.files_changed.length > 0 && (
-                              <div className="mt-1.5 ml-3.5 flex flex-wrap gap-1">
-                                {attempt.files_changed.map((file: string, i: number) => (
-                                  <span key={i} className="text-[10px] bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded font-mono">{file}</span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                    ))}
+                    {fixHistory.fixAttempts.map((attempt) => (
+                      <div key={attempt.id} className="bg-[#252a3a] rounded-md p-3 text-xs">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`w-1.5 h-1.5 rounded-full ${attempt.result_status === 'pass' ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <span className="text-[#9198b4] font-mono font-medium">Attempt #{attempt.attempt_number}</span>
+                          <span className={attempt.result_status === 'pass' ? 'text-green-400' : 'text-red-400'}>{attempt.result_status}</span>
+                        </div>
+                        {attempt.fix_description && <p className="text-[#9198b4] ml-3.5">{attempt.fix_description}</p>}
                       </div>
-                    )}
+                    ))}
                   </div>
                 </div>
               )}
@@ -613,11 +771,14 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
   );
 }
 
-function InfoItem({ label, value }: { label: string; value: string }) {
+/* ─────────────────────────────────────────────
+   Meta Item
+───────────────────────────────────────────── */
+function MetaItem({ label, value, className = '', highlight = false }: { label: string; value: string; className?: string; highlight?: boolean }) {
   return (
-    <div>
-      <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">{label}</div>
-      <div className="text-sm text-slate-300">{value}</div>
+    <div className={className}>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-[#555e7a] mb-1">{label}</div>
+      <div className={`text-[13px] font-medium ${highlight ? 'text-orange-400' : 'text-[#9198b4]'}`}>{value}</div>
     </div>
   );
 }

@@ -180,15 +180,25 @@ export class GitHubService {
     taskId: string,
     commitHash: string,
     notes?: string,
+    message?: string,
+    filesChanged?: number,
+    additions?: number,
+    deletions?: number,
   ): Promise<{ task: Task; message: string }> {
     const task = await taskRepo.findById(taskId);
     if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+
+    const payload: Record<string, unknown> = { commitHash, notes };
+    if (message !== undefined) payload.message = message;
+    if (filesChanged !== undefined) payload.files_changed = filesChanged;
+    if (additions !== undefined) payload.additions = additions;
+    if (deletions !== undefined) payload.deletions = deletions;
 
     await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'commit_sync',
-      payload: { commitHash, notes },
+      payload,
     });
 
     return {

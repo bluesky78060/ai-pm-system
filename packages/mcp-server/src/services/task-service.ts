@@ -127,11 +127,15 @@ export class TaskService {
     const previousStatus = task.status;
     const updated = await taskRepo.updateStatus(taskId, newStatus, notes);
 
+    const lastActivities = await activityRepo.findByTask(taskId, 1);
+    const lastTime = lastActivities.length > 0 ? new Date(lastActivities[0].created_at) : new Date(task.created_at);
+    const durationSeconds = Math.floor((Date.now() - lastTime.getTime()) / 1000);
+
     await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'status_change',
-      payload: { from: previousStatus, to: newStatus, notes },
+      payload: { from: previousStatus, to: newStatus, notes, duration_seconds: durationSeconds },
     });
 
     return {

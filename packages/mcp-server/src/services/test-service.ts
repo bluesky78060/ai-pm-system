@@ -47,7 +47,16 @@ export class TestService {
       task_id: taskId,
       actor: 'ai',
       action: 'test_run',
-      payload: { runNumber, summary },
+      payload: {
+        runNumber,
+        summary,
+        results: results.map(r => ({
+          name: r.test_type,
+          status: r.status,
+          duration_ms: r.duration_ms,
+          error: r.failures,
+        })),
+      },
     });
 
     return {

@@ -31,6 +31,43 @@ export class ActivityRepository {
     return rows.map(row => this.deserialize(row as ActivityLog));
   }
 
+  async logAiAnalysis(taskId: string, analysis: string, context?: Record<string, unknown>): Promise<ActivityLog> {
+    return this.create({
+      task_id: taskId,
+      actor: 'ai',
+      action: 'ai_analysis',
+      payload: { analysis, ...context },
+    });
+  }
+
+  async logCodeChange(taskId: string, data: {
+    files: { path: string; additions: number; deletions: number }[];
+    description: string;
+    diff_summary?: string;
+  }): Promise<ActivityLog> {
+    return this.create({
+      task_id: taskId,
+      actor: 'ai',
+      action: 'code_change',
+      payload: data as unknown as Record<string, unknown>,
+    });
+  }
+
+  async logError(taskId: string, data: {
+    error_type: string;
+    message: string;
+    file?: string;
+    line?: number;
+    stack?: string;
+  }): Promise<ActivityLog> {
+    return this.create({
+      task_id: taskId,
+      actor: 'system',
+      action: 'error_detected',
+      payload: data as unknown as Record<string, unknown>,
+    });
+  }
+
   async findRecent(limit = 50, filters?: { actor?: string; task_id?: string }): Promise<ActivityLog[]> {
     const conditions: string[] = [];
     const values: unknown[] = [];
