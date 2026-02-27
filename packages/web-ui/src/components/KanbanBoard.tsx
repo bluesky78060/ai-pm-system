@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Task, Epic } from '../api';
-import TaskCard from './TaskCard';
+import TaskCard, { EPIC_COLOR_PALETTE, type EpicColorInfo } from './TaskCard';
 import TaskModal from './TaskModal';
 
 interface KanbanBoardProps {
@@ -29,18 +29,9 @@ const COLUMNS: ColumnDef[] = [
   { key: 'blocked',     statuses: ['blocked'],            label: 'Blocked',     dotColor: 'bg-red-500',    group: 'COMPLETE', groupStart: false, groupEnd: true },
 ];
 
-const EPIC_COLORS = [
-  'text-blue-400',
-  'text-violet-400',
-  'text-emerald-400',
-  'text-rose-400',
-  'text-amber-400',
-  'text-cyan-400',
-];
-
 export default function KanbanBoard({ tasks, epics }: KanbanBoardProps) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const epicMap = new Map(epics.map((e, i) => [e.id, { title: e.title, color: EPIC_COLORS[i % EPIC_COLORS.length] }]));
+  const epicMap = new Map(epics.map((e, i) => [e.id, { title: e.title, color: EPIC_COLOR_PALETTE[i % EPIC_COLOR_PALETTE.length] }]));
 
   const tasksByStatus = tasks.reduce<Record<string, Task[]>>((acc, task) => {
     const status = task.status || 'todo';
