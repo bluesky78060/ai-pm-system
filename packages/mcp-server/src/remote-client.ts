@@ -9,31 +9,6 @@ export function isRemoteMode(): boolean {
   return !!API_URL;
 }
 
-async function request(method: string, path: string, body?: unknown): Promise<unknown> {
-  const url = `${API_URL}${path}`;
-  const options: RequestInit = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-  };
-  if (body !== undefined) {
-    options.body = JSON.stringify(body);
-  }
-  const res = await fetch(url);
-  if (method !== 'GET') {
-    const res2 = await fetch(url, options);
-    if (!res2.ok) {
-      const err = await res2.json().catch(() => ({ error: res2.statusText }));
-      throw new Error((err as { error: string }).error ?? res2.statusText);
-    }
-    return res2.json();
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error: string }).error ?? res.statusText);
-  }
-  return res.json();
-}
-
 async function get(path: string): Promise<unknown> {
   const url = `${API_URL}${path}`;
   const res = await fetch(url);
