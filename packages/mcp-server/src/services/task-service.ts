@@ -1,9 +1,21 @@
 import { TaskRepository } from '../db/repositories/task-repo.js';
 import { ActivityRepository } from '../db/repositories/activity-repo.js';
+import { UUID_REGEX } from '../utils/code-gen.js';
 import type { Task, TaskStatus } from '../types/index.js';
 
 const taskRepo = new TaskRepository();
 const activityRepo = new ActivityRepository();
+
+function resolveTask(idOrCode: string): Task {
+  let task: Task | undefined;
+  if (UUID_REGEX.test(idOrCode)) {
+    task = taskRepo.findById(idOrCode);
+  } else {
+    task = taskRepo.findByTicketCode(idOrCode);
+  }
+  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${idOrCode}`);
+  return task;
+}
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   todo: ['in_progress', 'blocked'],
@@ -16,8 +28,9 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 };
 
 export class TaskService {
-  getById(id: string): Task | undefined {
-    return taskRepo.findById(id);
+  getById(idOrCode: string): Task | undefined {
+    if (UUID_REGEX.test(idOrCode)) return taskRepo.findById(idOrCode);
+    return taskRepo.findByTicketCode(idOrCode);
   }
 
   getAll(filters?: { epic_id?: string; status?: string; assignee?: string; project_id?: string }): Task[] {
@@ -48,13 +61,13 @@ export class TaskService {
     return { task, message: `태스크 '${task.title}' 생성됨` };
   }
 
-  decompose(taskId: string, subtasks: { title: string; description?: string; priority?: number; estimated_hrs?: number }[]): {
+  decompose(taskIdOrCode: string, subtasks: { title: string; description?: string; priority?: number; estimated_hrs?: number }[]): {
     parentTask: Task;
     subtasks: Task[];
     message: string;
   } {
-    const parent = taskRepo.findById(taskId);
-    if (!parent) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    const parent = resolveTask(taskIdOrCode);
+    const taskId = parent.id;
 
     const created: Task[] = [];
     for (const sub of subtasks) {
@@ -84,9 +97,9 @@ export class TaskService {
     };
   }
 
-  updateStatus(taskId: string, newStatus: string, notes?: string): { task: Task; previousStatus: string; message: string } {
-    const task = taskRepo.findById(taskId);
-    if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+  updateStatus(taskIdOrCode: string, newStatus: string, notes?: string): { task: Task; previousStatus: string; message: string } {
+    const task = resolveTask(taskIdOrCode);
+    const taskId = task.id;
 
     const allowed = VALID_TRANSITIONS[task.status];
     if (!allowed || !allowed.includes(newStatus)) {
@@ -110,11 +123,11 @@ export class TaskService {
     };
   }
 
-  setPriority(taskId: string, priority: number, reason: string): { task: Task; previousPriority: number; message: string } {
+  setPriority(taskIdOrCode: string, priority: number, reason: string): { task: Task; previousPriority: number; message: string } {
     if (priority < 1 || priority > 5) throw new Error('우선순위는 1~5 사이여야 합니다');
 
-    const task = taskRepo.findById(taskId);
-    if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    const task = resolveTask(taskIdOrCode);
+    const taskId = task.id;
 
     const previousPriority = task.priority;
     const updated = taskRepo.updatePriority(taskId, priority);
@@ -133,11 +146,11 @@ export class TaskService {
     };
   }
 
-  addDependency(taskId: string, dependsOnId: string): { message: string } {
-    const task = taskRepo.findById(taskId);
-    if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
-    const dep = taskRepo.findById(dependsOnId);
-    if (!dep) throw new Error(`의존 대상 태스크를 찾을 수 없습니다: ${dependsOnId}`);
+  addDependency(taskIdOrCode: string, dependsOnIdOrCode: string): { message: string } {
+    const task = resolveTask(taskIdOrCode);
+    const taskId = task.id;
+    const dep = resolveTask(dependsOnIdOrCode);
+    const dependsOnId = dep.id;
 
     if (taskRepo.hasCircularDependency(taskId, dependsOnId)) {
       throw new Error(`순환 의존성이 감지되었습니다: ${taskId} → ${dependsOnId}`);

@@ -1,4 +1,5 @@
 import { getDb } from './connection.js';
+import { generateProjectCode } from '../utils/code-gen.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -102,7 +103,80 @@ CREATE TABLE IF NOT EXISTS fix_attempts (
 CREATE INDEX IF NOT EXISTS idx_fix_attempts_task ON fix_attempts(task_id);
 `;
 
+const MIGRATIONS = [
+  // v2: Add ticket code system (code, seq, ticket_code)
+  {
+    id: 'v2_ticket_codes',
+    sql: `
+      ALTER TABLE projects ADD COLUMN code TEXT;
+      ALTER TABLE epics ADD COLUMN seq INTEGER;
+      ALTER TABLE tasks ADD COLUMN seq INTEGER;
+      ALTER TABLE tasks ADD COLUMN ticket_code TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_code ON projects(code) WHERE code IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_ticket_code ON tasks(ticket_code) WHERE ticket_code IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_epic_seq ON tasks(epic_id, seq) WHERE epic_id IS NOT NULL AND seq IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_epics_project_seq ON epics(project_id, seq) WHERE seq IS NOT NULL;
+    `,
+    backfill: (db: ReturnType<typeof getDb>) => {
+      // Backfill project codes from existing names
+      const projects = db.prepare('SELECT id, name FROM projects WHERE code IS NULL').all() as { id: string; name: string }[];
+      for (const p of projects) {
+        const code = generateProjectCode(p.name);
+        let finalCode = code;
+        let suffix = 1;
+        while (db.prepare('SELECT 1 FROM projects WHERE code = ? AND id != ?').get(finalCode, p.id)) {
+          if (suffix > 999) break;
+          finalCode = `${code}${suffix++}`;
+        }
+        db.prepare('UPDATE projects SET code = ? WHERE id = ?').run(finalCode, p.id);
+      }
+      // Backfill epic seq
+      const epicsByProject = db.prepare('SELECT id, project_id FROM epics WHERE seq IS NULL ORDER BY order_index').all() as { id: string; project_id: string }[];
+      const epicSeqMap = new Map<string, number>();
+      for (const e of epicsByProject) {
+        const nextSeq = (epicSeqMap.get(e.project_id) ?? 0) + 1;
+        epicSeqMap.set(e.project_id, nextSeq);
+        db.prepare('UPDATE epics SET seq = ? WHERE id = ?').run(nextSeq, e.id);
+      }
+      // Backfill task seq and ticket_code
+      const tasks = db.prepare(`
+        SELECT t.id, t.epic_id, e.seq as epic_seq, p.code as project_code
+        FROM tasks t
+        LEFT JOIN epics e ON t.epic_id = e.id
+        LEFT JOIN projects p ON e.project_id = p.id
+        WHERE t.seq IS NULL
+        ORDER BY t.created_at
+      `).all() as { id: string; epic_id: string | null; epic_seq: number | null; project_code: string | null }[];
+      const taskSeqMap = new Map<string, number>();
+      for (const t of tasks) {
+        const epicKey = t.epic_id ?? '__orphan__';
+        const nextSeq = (taskSeqMap.get(epicKey) ?? 0) + 1;
+        taskSeqMap.set(epicKey, nextSeq);
+        const ticketCode = t.project_code && t.epic_seq
+          ? `${t.project_code}-${t.epic_seq}-${nextSeq}`
+          : null;
+        db.prepare('UPDATE tasks SET seq = ?, ticket_code = ? WHERE id = ?').run(nextSeq, ticketCode, t.id);
+      }
+    },
+  },
+];
+
 export function runMigrations(): void {
   const db = getDb();
   db.exec(SCHEMA);
+
+  // Ensure migrations tracking table
+  db.exec('CREATE TABLE IF NOT EXISTS _migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime(\'now\')))');
+
+  for (const migration of MIGRATIONS) {
+    const applied = db.prepare('SELECT 1 FROM _migrations WHERE id = ?').get(migration.id);
+    if (applied) continue;
+
+    const runMigration = db.transaction(() => {
+      db.exec(migration.sql);
+      if (migration.backfill) migration.backfill(db);
+      db.prepare('INSERT INTO _migrations (id) VALUES (?)').run(migration.id);
+    });
+    runMigration();
+  }
 }

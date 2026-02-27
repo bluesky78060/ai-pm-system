@@ -8,6 +8,7 @@ export type FixResultStatus = 'pass' | 'fail' | 'escalated';
 
 export interface Project {
   id: string;
+  code: string | null;
   name: string;
   description: string | null;
   status: ProjectStatus;
@@ -24,6 +25,7 @@ export interface Epic {
   status: EpicStatus;
   priority: number;
   order_index: number;
+  seq: number | null;
   created_at: string;
 }
 
@@ -42,6 +44,8 @@ export interface Task {
   actual_hrs: number | null;
   blocked_by: string | null;
   created_by: 'ai' | 'human';
+  seq: number | null;
+  ticket_code: string | null;
   created_at: string;
   completed_at: string | null;
 }

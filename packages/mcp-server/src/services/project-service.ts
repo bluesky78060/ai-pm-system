@@ -1,6 +1,7 @@
 import { ProjectRepository } from '../db/repositories/project-repo.js';
 import { EpicRepository } from '../db/repositories/epic-repo.js';
 import { ActivityRepository } from '../db/repositories/activity-repo.js';
+import { UUID_REGEX } from '../utils/code-gen.js';
 import type { Project, Epic } from '../types/index.js';
 
 const projectRepo = new ProjectRepository();
@@ -12,8 +13,9 @@ export class ProjectService {
     return projectRepo.findAll();
   }
 
-  getById(id: string): Project | undefined {
-    return projectRepo.findById(id);
+  getById(idOrCode: string): Project | undefined {
+    if (UUID_REGEX.test(idOrCode)) return projectRepo.findById(idOrCode);
+    return projectRepo.findByCode(idOrCode);
   }
 
   create(data: { name: string; description?: string; github_repo?: string }): Project {

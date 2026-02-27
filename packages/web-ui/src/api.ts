@@ -14,6 +14,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export interface Project {
   id: string;
+  code: string | null;
   name: string;
   description: string | null;
   status: string;
@@ -30,6 +31,7 @@ export interface Epic {
   status: string;
   priority: number;
   order_index: number;
+  seq: number | null;
   created_at: string;
   taskCount?: number;
   completedCount?: number;
@@ -51,6 +53,8 @@ export interface Task {
   actual_hrs: number | null;
   blocked_by: string | null;
   created_by: string;
+  seq: number | null;
+  ticket_code: string | null;
   created_at: string;
   completed_at: string | null;
 }

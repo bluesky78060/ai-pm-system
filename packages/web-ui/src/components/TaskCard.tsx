@@ -37,13 +37,20 @@ export default function TaskCard({ task, epicTitle, epicColor = 'text-blue-400',
       onClick={() => onClick?.(task.id)}
       className={`block rounded-lg border ${borderColor} bg-[#1A1D2E] p-3.5 transition-all hover:bg-[#1E2135] hover:border-opacity-60 cursor-pointer ${isDone ? 'opacity-70' : ''}`}
     >
-      {/* Top row: Epic + Priority */}
+      {/* Top row: Ticket Code + Epic + Priority */}
       <div className="flex items-center justify-between mb-2">
-        {epicTitle ? (
-          <span className={`text-[10px] font-medium px-2 py-0.5 rounded bg-slate-800 ${epicColor}`}>
-            {epicTitle}
-          </span>
-        ) : <span />}
+        <div className="flex items-center gap-1.5">
+          {task.ticket_code && (
+            <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-indigo-900/40 text-indigo-300">
+              {task.ticket_code}
+            </span>
+          )}
+          {epicTitle && (
+            <span className={`text-[10px] font-medium px-2 py-0.5 rounded bg-slate-800 ${epicColor}`}>
+              {epicTitle}
+            </span>
+          )}
+        </div>
         {isDone ? (
           <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />

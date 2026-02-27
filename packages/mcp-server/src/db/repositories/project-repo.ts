@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { getDb } from '../connection.js';
 import type { Project } from '../../types/index.js';
+import { generateProjectCode } from '../../utils/code-gen.js';
 
 export class ProjectRepository {
   findAll(): Project[] {
@@ -13,12 +14,24 @@ export class ProjectRepository {
     return db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Project | undefined;
   }
 
-  create(data: { name: string; description?: string; github_repo?: string }): Project {
+  findByCode(code: string): Project | undefined {
+    const db = getDb();
+    return db.prepare('SELECT * FROM projects WHERE code = ?').get(code) as Project | undefined;
+  }
+
+  create(data: { name: string; description?: string; github_repo?: string; code?: string }): Project {
     const db = getDb();
     const id = uuid();
+    const code = data.code ?? generateProjectCode(data.name);
+    let finalCode = code;
+    let suffix = 1;
+    while (db.prepare('SELECT 1 FROM projects WHERE code = ?').get(finalCode)) {
+      if (suffix > 999) throw new Error(`프로젝트 코드를 생성할 수 없습니다: ${data.name}`);
+      finalCode = `${code}${suffix++}`;
+    }
     db.prepare(
-      'INSERT INTO projects (id, name, description, github_repo) VALUES (?, ?, ?, ?)'
-    ).run(id, data.name, data.description ?? null, data.github_repo ?? null);
+      'INSERT INTO projects (id, name, description, github_repo, code) VALUES (?, ?, ?, ?, ?)'
+    ).run(id, data.name, data.description ?? null, data.github_repo ?? null, finalCode);
     return this.findById(id)!;
   }
 

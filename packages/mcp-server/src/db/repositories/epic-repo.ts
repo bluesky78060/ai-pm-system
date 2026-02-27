@@ -13,13 +13,19 @@ export class EpicRepository {
     return db.prepare('SELECT * FROM epics WHERE id = ?').get(id) as Epic | undefined;
   }
 
+  findBySeq(projectId: string, seq: number): Epic | undefined {
+    const db = getDb();
+    return db.prepare('SELECT * FROM epics WHERE project_id = ? AND seq = ?').get(projectId, seq) as Epic | undefined;
+  }
+
   create(data: { project_id: string; title: string; description?: string; priority?: number }): Epic {
     const db = getDb();
     const id = uuid();
     const maxOrder = db.prepare('SELECT COALESCE(MAX(order_index), -1) + 1 as next FROM epics WHERE project_id = ?').get(data.project_id) as { next: number };
+    const maxSeq = db.prepare('SELECT COALESCE(MAX(seq), 0) + 1 as next FROM epics WHERE project_id = ?').get(data.project_id) as { next: number };
     db.prepare(
-      'INSERT INTO epics (id, project_id, title, description, priority, order_index) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(id, data.project_id, data.title, data.description ?? null, data.priority ?? 3, maxOrder.next);
+      'INSERT INTO epics (id, project_id, title, description, priority, order_index, seq) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, data.project_id, data.title, data.description ?? null, data.priority ?? 3, maxOrder.next, maxSeq.next);
     return this.findById(id)!;
   }
 

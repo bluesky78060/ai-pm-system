@@ -113,6 +113,11 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
             <div className="sticky top-0 bg-[#12141F] border-b border-slate-700/40 px-6 py-4 flex items-start justify-between z-10">
               <div className="flex-1 min-w-0 pr-4">
                 <div className="flex items-center gap-2 mb-2">
+                  {task.ticket_code && (
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-indigo-900/50 text-indigo-300 border border-indigo-700/30">
+                      {task.ticket_code}
+                    </span>
+                  )}
                   <span className={`text-xs font-medium px-2.5 py-1 rounded-md ${statusStyle.bg} ${statusStyle.text}`}>
                     {task.status.replace('_', ' ')}
                   </span>

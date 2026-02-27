@@ -59,6 +59,11 @@ export class TaskRepository {
     return result;
   }
 
+  findByTicketCode(ticketCode: string): Task | undefined {
+    const db = getDb();
+    return db.prepare('SELECT * FROM tasks WHERE ticket_code = ?').get(ticketCode) as Task | undefined;
+  }
+
   create(data: {
     title: string;
     epic_id?: string;
@@ -71,9 +76,27 @@ export class TaskRepository {
   }): Task {
     const db = getDb();
     const id = uuid();
+
+    // Calculate seq and ticket_code
+    let seq: number | null = null;
+    let ticketCode: string | null = null;
+    if (data.epic_id) {
+      const maxSeq = db.prepare('SELECT COALESCE(MAX(seq), 0) + 1 as next FROM tasks WHERE epic_id = ?').get(data.epic_id) as { next: number };
+      seq = maxSeq.next;
+      // Look up epic's seq and project's code
+      const epicInfo = db.prepare(`
+        SELECT e.seq as epic_seq, p.code as project_code
+        FROM epics e JOIN projects p ON e.project_id = p.id
+        WHERE e.id = ?
+      `).get(data.epic_id) as { epic_seq: number | null; project_code: string | null } | undefined;
+      if (epicInfo?.project_code && epicInfo?.epic_seq) {
+        ticketCode = `${epicInfo.project_code}-${epicInfo.epic_seq}-${seq}`;
+      }
+    }
+
     db.prepare(`
-      INSERT INTO tasks (id, epic_id, parent_id, title, description, priority, assignee, created_by, estimated_hrs)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (id, epic_id, parent_id, title, description, priority, assignee, created_by, estimated_hrs, seq, ticket_code)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       data.epic_id ?? null,
@@ -84,14 +107,16 @@ export class TaskRepository {
       data.assignee ?? 'ai',
       data.created_by ?? 'human',
       data.estimated_hrs ?? null,
+      seq,
+      ticketCode,
     );
     return this.findById(id)!;
   }
 
   updateStatus(id: string, status: string, notes?: string): Task {
     const db = getDb();
-    const completedAt = status === 'done' ? "datetime('now')" : 'NULL';
-    db.prepare(`UPDATE tasks SET status = ?, completed_at = ${completedAt} WHERE id = ?`).run(status, id);
+    const completedAt = status === 'done' ? new Date().toISOString().replace('T', ' ').slice(0, 19) : null;
+    db.prepare('UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?').run(status, completedAt, id);
     return this.findById(id)!;
   }
 

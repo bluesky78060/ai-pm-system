@@ -7,6 +7,7 @@ import { TaskService } from './services/task-service.js';
 import { ContextService } from './services/context-service.js';
 import { TestService } from './services/test-service.js';
 import { GitHubService } from './services/github-service.js';
+import { ActivityRepository } from './db/repositories/activity-repo.js';
 
 const ErrorCode = {
   NOT_FOUND: 'NOT_FOUND',
@@ -41,6 +42,7 @@ const taskService = new TaskService();
 const contextService = new ContextService();
 const testService = new TestService();
 const githubService = new GitHubService();
+const activityRepo = new ActivityRepository();
 
 // Create MCP server
 const server = new Server(
@@ -386,6 +388,31 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['task_id', 'commit_hash'],
       },
     },
+    // Activity tools
+    {
+      name: 'get_task_activities',
+      description: 'Get activity log for a specific task. Returns status changes, creation, and other events.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          task_id: { type: 'string', description: 'Task ID or ticket code (e.g. APS-1-3)' },
+          limit: { type: 'number', description: 'Max results (default 20)' },
+        },
+        required: ['task_id'],
+      },
+    },
+    {
+      name: 'get_project_activities',
+      description: 'Get recent activity log for all tasks in a project.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_id: { type: 'string', description: 'Project ID' },
+          limit: { type: 'number', description: 'Max results (default 30)' },
+        },
+        required: ['project_id'],
+      },
+    },
   ],
 }));
 
@@ -560,6 +587,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           args?.commit_hash as string,
           args?.notes as string | undefined,
         );
+        break;
+      }
+      // Activity tools
+      case 'get_task_activities': {
+        const task = taskService.getById(args?.task_id as string);
+        if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${args?.task_id}`);
+        const limit = (args?.limit as number) || 20;
+        result = { activities: activityRepo.findByTask(task.id, limit) };
+        break;
+      }
+      case 'get_project_activities': {
+        const projectId = args?.project_id as string;
+        const projLimit = (args?.limit as number) || 30;
+        const tasks = taskService.getAll({ project_id: projectId });
+        const taskIds = tasks.map(t => t.id);
+        if (taskIds.length === 0) {
+          result = { activities: [] };
+        } else {
+          const allActivities = taskIds.flatMap(tid => activityRepo.findByTask(tid, projLimit));
+          allActivities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          result = { activities: allActivities.slice(0, projLimit) };
+        }
         break;
       }
       default:
