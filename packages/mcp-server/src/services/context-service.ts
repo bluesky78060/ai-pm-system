@@ -24,11 +24,11 @@ export interface BlockingAnalysis {
 }
 
 export class ContextService {
-  getSessionContext(projectId: string): SessionContext {
-    const project = projectRepo.findById(projectId);
+  async getSessionContext(projectId: string): Promise<SessionContext> {
+    const project = await projectRepo.findById(projectId);
     if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
 
-    const allTasks = taskRepo.findAll({ project_id: projectId });
+    const allTasks = await taskRepo.findAll({ project_id: projectId });
 
     // Group current tasks by status
     const inProgress = allTasks.filter((t) => t.status === 'in_progress');
@@ -55,7 +55,7 @@ export class ContextService {
     const completionRate = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
 
     // byEpic progress
-    const epics = epicRepo.findByProject(projectId);
+    const epics = await epicRepo.findByProject(projectId);
     const byEpic = epics.map((epic) => {
       const epicTasks = allTasks.filter((t) => t.epic_id === epic.id);
       const epicCompleted = epicTasks.filter((t) => t.status === 'done').length;
@@ -78,11 +78,13 @@ export class ContextService {
     let nextRecommended: SessionContext['nextRecommended'] = null;
 
     for (const task of todoTasks) {
-      const deps = taskRepo.getDependencies(task.id);
-      const allDepsDone = deps.every((dep) => {
-        const depTask = taskRepo.findById(dep.depends_on);
-        return depTask?.status === 'done';
-      });
+      const deps = await taskRepo.getDependencies(task.id);
+      const allDepsDone = (await Promise.all(
+        deps.map(async (dep) => {
+          const depTask = await taskRepo.findById(dep.depends_on);
+          return depTask?.status === 'done';
+        })
+      )).every(Boolean);
 
       if (allDepsDone) {
         let reason: string;
@@ -124,14 +126,14 @@ export class ContextService {
     };
   }
 
-  getProjectStatus(projectId: string): ProjectStatusOutput {
-    const project = projectRepo.findById(projectId);
+  async getProjectStatus(projectId: string): Promise<ProjectStatusOutput> {
+    const project = await projectRepo.findById(projectId);
     if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
 
-    const epics = epicRepo.findByProject(projectId);
-    const allTasks = taskRepo.findAll({ project_id: projectId });
+    const epics = await epicRepo.findByProject(projectId);
+    const allTasks = await taskRepo.findAll({ project_id: projectId });
 
-    const statusBreakdown = taskRepo.countByStatus(projectId);
+    const statusBreakdown = await taskRepo.countByStatus(projectId);
 
     const epicsWithCounts = epics.map((epic) => {
       const epicTasks = allTasks.filter((t) => t.epic_id === epic.id);
@@ -162,14 +164,17 @@ export class ContextService {
     };
   }
 
-  getBlockingAnalysis(projectId: string): BlockingAnalysis {
-    const blockedTasks = taskRepo.findAll({ project_id: projectId, status: 'blocked' });
+  async getBlockingAnalysis(projectId: string): Promise<BlockingAnalysis> {
+    const blockedTasks = await taskRepo.findAll({ project_id: projectId, status: 'blocked' });
 
-    const criticalPath: BlockingIssue[] = blockedTasks.map((task) => {
-      const dependentLinks = taskRepo.getDependents(task.id);
-      const blockedDependents = dependentLinks
-        .map((dep) => taskRepo.findById(dep.task_id))
-        .filter((t): t is Task => t !== undefined);
+    const criticalPath: BlockingIssue[] = [];
+    for (const task of blockedTasks) {
+      const dependentLinks = await taskRepo.getDependents(task.id);
+      const blockedDependents: Task[] = [];
+      for (const dep of dependentLinks) {
+        const t = await taskRepo.findById(dep.task_id);
+        if (t) blockedDependents.push(t);
+      }
 
       let suggestedAction: string;
       if (task.blocked_by) {
@@ -180,14 +185,14 @@ export class ContextService {
         suggestedAction = '블로킹 원인을 파악하고 상태를 업데이트하세요';
       }
 
-      return {
+      criticalPath.push({
         task,
         blockedSince: task.created_at,
         reason: task.blocked_by,
         blockedDependents,
         suggestedAction,
-      };
-    });
+      });
+    }
 
     // Sort by number of dependents (most impact first)
     criticalPath.sort((a, b) => b.blockedDependents.length - a.blockedDependents.length);
@@ -195,7 +200,7 @@ export class ContextService {
     // Delayed tasks: in_progress for more than 7 days
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const inProgressTasks = taskRepo.findAll({ project_id: projectId, status: 'in_progress' });
+    const inProgressTasks = await taskRepo.findAll({ project_id: projectId, status: 'in_progress' });
     const delayedTasks = inProgressTasks.filter((task) => {
       const createdAt = new Date(task.created_at);
       return createdAt < sevenDaysAgo;

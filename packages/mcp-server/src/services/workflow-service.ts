@@ -28,25 +28,25 @@ export class WorkflowService {
   /**
    * startWork: 태스크를 in_progress로 전환하고 관련 컨텍스트를 반환합니다.
    */
-  startWork(taskId: string): {
+  async startWork(taskId: string): Promise<{
     task: Task;
     subtasks: Task[];
     dependencies: { task_id: string; depends_on: string }[];
     message: string;
-  } {
-    const found = this.taskService.getById(taskId);
+  }> {
+    const found = await this.taskService.getById(taskId);
     if (!found) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
     let task: Task;
     try {
-      const result = this.taskService.updateStatus(found.id, 'in_progress', '작업 시작 (smart_workflow)');
+      const result = await this.taskService.updateStatus(found.id, 'in_progress', '작업 시작 (smart_workflow)');
       task = result.task;
     } catch (e) {
       throw new Error(`작업 시작 실패 (${found.ticket_code ?? found.id}): ${(e as Error).message}`);
     }
 
-    const subtasks = this.taskService.getSubtasks(task.id);
-    const dependencies = this.taskRepo.getDependencies(task.id);
+    const subtasks = await this.taskService.getSubtasks(task.id);
+    const dependencies = await this.taskRepo.getDependencies(task.id);
 
     return {
       task,
@@ -62,16 +62,16 @@ export class WorkflowService {
    * - 실패 + 시도 < 3 → fixing
    * - 실패 + 시도 >= 3 → blocked (에스컬레이션)
    */
-  submitTest(
+  async submitTest(
     taskId: string,
     results: TestResult[],
-  ): {
+  ): Promise<{
     task: Task;
     overall: 'pass' | 'fail';
     run_number: number;
     next_status: string;
-  } {
-    const found = this.taskService.getById(taskId);
+  }> {
+    const found = await this.taskService.getById(taskId);
     if (!found) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
     let task = found;
@@ -79,7 +79,7 @@ export class WorkflowService {
     // in_progress 상태면 자동으로 testing으로 전환
     if (task.status === 'in_progress') {
       try {
-        const result = this.taskService.updateStatus(task.id, 'testing', '테스트 제출 (smart_workflow)');
+        const result = await this.taskService.updateStatus(task.id, 'testing', '테스트 제출 (smart_workflow)');
         task = result.task;
       } catch (e) {
         throw new Error(`testing 상태 전환 실패 (${task.ticket_code ?? task.id}): ${(e as Error).message}`);
@@ -87,9 +87,9 @@ export class WorkflowService {
     }
 
     // 테스트 결과 기록
-    const run_number = this.testRunRepo.getLatestRunNumber(task.id) + 1;
+    const run_number = await this.testRunRepo.getLatestRunNumber(task.id) + 1;
     for (const result of results) {
-      this.testRunRepo.create({
+      await this.testRunRepo.create({
         task_id: task.id,
         run_number,
         test_type: result.test_type,
@@ -105,25 +105,25 @@ export class WorkflowService {
 
     if (overall === 'pass') {
       try {
-        const result = this.taskService.updateStatus(task.id, 'review', '테스트 통과 → 리뷰 (smart_workflow)');
+        const result = await this.taskService.updateStatus(task.id, 'review', '테스트 통과 → 리뷰 (smart_workflow)');
         task = result.task;
       } catch (e) {
         throw new Error(`review 상태 전환 실패 (${task.ticket_code ?? task.id}): ${(e as Error).message}`);
       }
     } else {
       // 수정 시도 횟수 확인
-      const attempts = this.fixAttemptRepo.getLatestAttemptNumber(task.id);
+      const attempts = await this.fixAttemptRepo.getLatestAttemptNumber(task.id);
 
       if (attempts < 3) {
         try {
-          const result = this.taskService.updateStatus(task.id, 'fixing', '테스트 실패 → 수정 필요 (smart_workflow)');
+          const result = await this.taskService.updateStatus(task.id, 'fixing', '테스트 실패 → 수정 필요 (smart_workflow)');
           task = result.task;
         } catch (e) {
           throw new Error(`fixing 상태 전환 실패 (${task.ticket_code ?? task.id}): ${(e as Error).message}`);
         }
       } else {
         try {
-          const result = this.taskService.updateStatus(task.id, 'blocked', '3회 수정 실패 → 에스컬레이션 (smart_workflow)');
+          const result = await this.taskService.updateStatus(task.id, 'blocked', '3회 수정 실패 → 에스컬레이션 (smart_workflow)');
           task = result.task;
         } catch (e) {
           throw new Error(`blocked 상태 전환 실패 (${task.ticket_code ?? task.id}): ${(e as Error).message}`);
@@ -131,7 +131,7 @@ export class WorkflowService {
       }
     }
 
-    this.activityRepo.create({
+    await this.activityRepo.create({
       task_id: task.id,
       actor: 'ai',
       action: 'workflow_test',
@@ -149,28 +149,28 @@ export class WorkflowService {
   /**
    * completeFix: 수정 완료 후 재테스트(testing) 상태로 전환합니다.
    */
-  completeFix(
+  async completeFix(
     taskId: string,
     notes?: string,
-  ): {
+  ): Promise<{
     task: Task;
     message: string;
-  } {
-    const found = this.taskService.getById(taskId);
+  }> {
+    const found = await this.taskService.getById(taskId);
     if (!found) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
-    const fixAttempts = this.fixAttemptRepo.findByTask(found.id);
+    const fixAttempts = await this.fixAttemptRepo.findByTask(found.id);
     const lastAttempt: FixAttempt | undefined = fixAttempts.length > 0 ? fixAttempts[0] : undefined;
 
     let task: Task;
     try {
-      const result = this.taskService.updateStatus(found.id, 'testing', notes ?? '수정 완료 → 재테스트 (smart_workflow)');
+      const result = await this.taskService.updateStatus(found.id, 'testing', notes ?? '수정 완료 → 재테스트 (smart_workflow)');
       task = result.task;
     } catch (e) {
       throw new Error(`testing 상태 전환 실패 (${found.ticket_code ?? found.id}): ${(e as Error).message}`);
     }
 
-    this.activityRepo.create({
+    await this.activityRepo.create({
       task_id: task.id,
       actor: 'ai',
       action: 'workflow_fix_complete',
@@ -187,21 +187,21 @@ export class WorkflowService {
    * approveReview: 리뷰를 승인하고 done으로 전환합니다.
    * 에픽 완료율과 다음 추천 태스크를 함께 반환합니다.
    */
-  approveReview(
+  async approveReview(
     taskId: string,
     notes?: string,
-  ): {
+  ): Promise<{
     task: Task;
     epicProgress: { total: number; completed: number; rate: number } | null;
     nextRecommended: { task: Task; reason: string } | null;
     message: string;
-  } {
-    const found = this.taskService.getById(taskId);
+  }> {
+    const found = await this.taskService.getById(taskId);
     if (!found) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
     let task: Task;
     try {
-      const result = this.taskService.updateStatus(found.id, 'done', notes ?? '리뷰 승인 → 완료 (smart_workflow)');
+      const result = await this.taskService.updateStatus(found.id, 'done', notes ?? '리뷰 승인 → 완료 (smart_workflow)');
       task = result.task;
     } catch (e) {
       throw new Error(`done 상태 전환 실패 (${found.ticket_code ?? found.id}): ${(e as Error).message}`);
@@ -212,17 +212,17 @@ export class WorkflowService {
     let nextRecommended: { task: Task; reason: string } | null = null;
 
     if (task.epic_id) {
-      const epicTasks = this.taskRepo.findByEpic(task.epic_id);
+      const epicTasks = await this.taskRepo.findByEpic(task.epic_id);
       const total = epicTasks.length;
       const completed = epicTasks.filter((t) => t.status === 'done').length;
       const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
       epicProgress = { total, completed, rate };
 
       // 다음 추천 태스크: 같은 프로젝트의 todo 태스크 중 의존성 모두 완료된 것
-      const epic = this.epicRepo.findById(task.epic_id);
+      const epic = await this.epicRepo.findById(task.epic_id);
       if (epic) {
         try {
-          const sessionContext = this.contextService.getSessionContext(epic.project_id);
+          const sessionContext = await this.contextService.getSessionContext(epic.project_id);
           nextRecommended = sessionContext.nextRecommended;
         } catch {
           // 컨텍스트 조회 실패 시 무시 (nextRecommended는 null 유지)

@@ -6,12 +6,12 @@ import type { Task, TaskStatus } from '../types/index.js';
 const taskRepo = new TaskRepository();
 const activityRepo = new ActivityRepository();
 
-function resolveTask(idOrCode: string): Task {
+async function resolveTask(idOrCode: string): Promise<Task> {
   let task: Task | undefined;
   if (UUID_REGEX.test(idOrCode)) {
-    task = taskRepo.findById(idOrCode);
+    task = await taskRepo.findById(idOrCode);
   } else {
-    task = taskRepo.findByTicketCode(idOrCode);
+    task = await taskRepo.findByTicketCode(idOrCode);
   }
   if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${idOrCode}`);
   return task;
@@ -28,20 +28,20 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 };
 
 export class TaskService {
-  getById(idOrCode: string): Task | undefined {
+  async getById(idOrCode: string): Promise<Task | undefined> {
     if (UUID_REGEX.test(idOrCode)) return taskRepo.findById(idOrCode);
     return taskRepo.findByTicketCode(idOrCode);
   }
 
-  getAll(filters?: { epic_id?: string; status?: string; assignee?: string; project_id?: string }): Task[] {
+  async getAll(filters?: { epic_id?: string; status?: string; assignee?: string; project_id?: string }): Promise<Task[]> {
     return taskRepo.findAll(filters);
   }
 
-  getSubtasks(parentId: string): Task[] {
+  async getSubtasks(parentId: string): Promise<Task[]> {
     return taskRepo.findByParent(parentId);
   }
 
-  create(data: {
+  async create(data: {
     title: string;
     epic_id?: string;
     parent_id?: string;
@@ -50,9 +50,9 @@ export class TaskService {
     assignee?: string;
     created_by?: 'ai' | 'human';
     estimated_hrs?: number;
-  }): { task: Task; message: string } {
-    const task = taskRepo.create(data);
-    activityRepo.create({
+  }): Promise<{ task: Task; message: string }> {
+    const task = await taskRepo.create(data);
+    await activityRepo.create({
       task_id: task.id,
       actor: data.created_by ?? 'human',
       action: 'create',
@@ -61,17 +61,17 @@ export class TaskService {
     return { task, message: `태스크 '${task.title}' 생성됨` };
   }
 
-  decompose(taskIdOrCode: string, subtasks: { title: string; description?: string; priority?: number; estimated_hrs?: number }[]): {
+  async decompose(taskIdOrCode: string, subtasks: { title: string; description?: string; priority?: number; estimated_hrs?: number }[]): Promise<{
     parentTask: Task;
     subtasks: Task[];
     message: string;
-  } {
-    const parent = resolveTask(taskIdOrCode);
+  }> {
+    const parent = await resolveTask(taskIdOrCode);
     const taskId = parent.id;
 
     const created: Task[] = [];
     for (const sub of subtasks) {
-      const task = taskRepo.create({
+      const task = await taskRepo.create({
         title: sub.title,
         description: sub.description,
         priority: sub.priority,
@@ -83,7 +83,7 @@ export class TaskService {
       created.push(task);
     }
 
-    activityRepo.create({
+    await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'decompose',
@@ -97,8 +97,8 @@ export class TaskService {
     };
   }
 
-  updateStatus(taskIdOrCode: string, newStatus: string, notes?: string): { task: Task; previousStatus: string; message: string } {
-    const task = resolveTask(taskIdOrCode);
+  async updateStatus(taskIdOrCode: string, newStatus: string, notes?: string): Promise<{ task: Task; previousStatus: string; message: string }> {
+    const task = await resolveTask(taskIdOrCode);
     const taskId = task.id;
 
     const allowed = VALID_TRANSITIONS[task.status];
@@ -107,9 +107,9 @@ export class TaskService {
     }
 
     const previousStatus = task.status;
-    const updated = taskRepo.updateStatus(taskId, newStatus, notes);
+    const updated = await taskRepo.updateStatus(taskId, newStatus, notes);
 
-    activityRepo.create({
+    await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'status_change',
@@ -123,16 +123,16 @@ export class TaskService {
     };
   }
 
-  setPriority(taskIdOrCode: string, priority: number, reason: string): { task: Task; previousPriority: number; message: string } {
+  async setPriority(taskIdOrCode: string, priority: number, reason: string): Promise<{ task: Task; previousPriority: number; message: string }> {
     if (priority < 1 || priority > 5) throw new Error('우선순위는 1~5 사이여야 합니다');
 
-    const task = resolveTask(taskIdOrCode);
+    const task = await resolveTask(taskIdOrCode);
     const taskId = task.id;
 
     const previousPriority = task.priority;
-    const updated = taskRepo.updatePriority(taskId, priority);
+    const updated = await taskRepo.updatePriority(taskId, priority);
 
-    activityRepo.create({
+    await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'update',
@@ -146,19 +146,19 @@ export class TaskService {
     };
   }
 
-  addDependency(taskIdOrCode: string, dependsOnIdOrCode: string): { message: string } {
-    const task = resolveTask(taskIdOrCode);
+  async addDependency(taskIdOrCode: string, dependsOnIdOrCode: string): Promise<{ message: string }> {
+    const task = await resolveTask(taskIdOrCode);
     const taskId = task.id;
-    const dep = resolveTask(dependsOnIdOrCode);
+    const dep = await resolveTask(dependsOnIdOrCode);
     const dependsOnId = dep.id;
 
-    if (taskRepo.hasCircularDependency(taskId, dependsOnId)) {
+    if (await taskRepo.hasCircularDependency(taskId, dependsOnId)) {
       throw new Error(`순환 의존성이 감지되었습니다: ${taskId} → ${dependsOnId}`);
     }
 
-    taskRepo.addDependency(taskId, dependsOnId);
+    await taskRepo.addDependency(taskId, dependsOnId);
 
-    activityRepo.create({
+    await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'update',
@@ -168,7 +168,7 @@ export class TaskService {
     return { message: `의존성 추가: '${task.title}' → '${dep.title}'` };
   }
 
-  getStatusCounts(projectId: string): Record<string, number> {
+  async getStatusCounts(projectId: string): Promise<Record<string, number>> {
     return taskRepo.countByStatus(projectId);
   }
 }

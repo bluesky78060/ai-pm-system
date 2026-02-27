@@ -16,19 +16,19 @@ export class TestService {
    * run_tests: Record test execution results for a task.
    * Increments run_number automatically. Creates TestRun records for each test type.
    */
-  runTests(
+  async runTests(
     taskId: string,
     results: { test_type: string; status: string; output?: string; failures?: string; duration_ms?: number }[],
-  ): { runNumber: number; results: TestRun[]; summary: { pass: number; fail: number; skip: number }; message: string } {
-    const task = taskRepo.findById(taskId);
+  ): Promise<{ runNumber: number; results: TestRun[]; summary: { pass: number; fail: number; skip: number }; message: string }> {
+    const task = await taskRepo.findById(taskId);
     if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
-    const runNumber = testRunRepo.getLatestRunNumber(taskId) + 1;
+    const runNumber = await testRunRepo.getLatestRunNumber(taskId) + 1;
     const created: TestRun[] = [];
     const summary = { pass: 0, fail: 0, skip: 0 };
 
     for (const r of results) {
-      const testRun = testRunRepo.create({
+      const testRun = await testRunRepo.create({
         task_id: taskId,
         run_number: runNumber,
         test_type: r.test_type,
@@ -43,7 +43,7 @@ export class TestService {
       else summary.skip++;
     }
 
-    activityRepo.create({
+    await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'test_run',
@@ -63,18 +63,18 @@ export class TestService {
    * - If all pass: task status -> review
    * - If any fail: task status -> fixing (if attempts < MAX) or blocked (if escalated)
    */
-  reportTestResult(
+  async reportTestResult(
     taskId: string,
     overallStatus: 'pass' | 'fail',
     failureDetails?: { file?: string; line?: number; message: string }[],
-  ): { task: Task; action: string; message: string } {
-    const task = taskRepo.findById(taskId);
+  ): Promise<{ task: Task; action: string; message: string }> {
+    const task = await taskRepo.findById(taskId);
     if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
     if (overallStatus === 'pass') {
       // Move to review
-      const updated = taskRepo.updateStatus(taskId, 'review', '모든 테스트 통과');
-      activityRepo.create({
+      const updated = await taskRepo.updateStatus(taskId, 'review', '모든 테스트 통과');
+      await activityRepo.create({
         task_id: taskId,
         actor: 'ai',
         action: 'status_change',
@@ -84,12 +84,12 @@ export class TestService {
     }
 
     // Fail case: check fix attempt count
-    const currentAttempts = fixAttemptRepo.getLatestAttemptNumber(taskId);
+    const currentAttempts = await fixAttemptRepo.getLatestAttemptNumber(taskId);
 
     if (currentAttempts >= MAX_FIX_ATTEMPTS) {
       // Escalate
-      const updated = taskRepo.updateStatus(taskId, 'blocked', `${MAX_FIX_ATTEMPTS}회 수정 시도 후에도 테스트 실패 - 에스컬레이션`);
-      activityRepo.create({
+      const updated = await taskRepo.updateStatus(taskId, 'blocked', `${MAX_FIX_ATTEMPTS}회 수정 시도 후에도 테스트 실패 - 에스컬레이션`);
+      await activityRepo.create({
         task_id: taskId,
         actor: 'ai',
         action: 'escalate',
@@ -103,8 +103,8 @@ export class TestService {
     }
 
     // Move to fixing
-    const updated = taskRepo.updateStatus(taskId, 'fixing', `테스트 실패 - 수정 시도 ${currentAttempts + 1}/${MAX_FIX_ATTEMPTS}`);
-    activityRepo.create({
+    const updated = await taskRepo.updateStatus(taskId, 'fixing', `테스트 실패 - 수정 시도 ${currentAttempts + 1}/${MAX_FIX_ATTEMPTS}`);
+    await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'status_change',
@@ -120,25 +120,25 @@ export class TestService {
   /**
    * create_fix_task: Create a fix subtask and record fix attempt.
    */
-  createFixTask(
+  async createFixTask(
     parentTaskId: string,
     issueDescription: string,
     filesChanged?: { path: string; diff?: string }[],
-  ): { fixTask: Task; fixAttempt: FixAttempt; message: string } {
-    const parentTask = taskRepo.findById(parentTaskId);
+  ): Promise<{ fixTask: Task; fixAttempt: FixAttempt; message: string }> {
+    const parentTask = await taskRepo.findById(parentTaskId);
     if (!parentTask) throw new Error(`태스크를 찾을 수 없습니다: ${parentTaskId}`);
 
-    const attemptNumber = fixAttemptRepo.getLatestAttemptNumber(parentTaskId) + 1;
+    const attemptNumber = await fixAttemptRepo.getLatestAttemptNumber(parentTaskId) + 1;
     if (attemptNumber > MAX_FIX_ATTEMPTS) {
       throw new Error(`최대 수정 횟수(${MAX_FIX_ATTEMPTS})를 초과했습니다. 에스컬레이션이 필요합니다.`);
     }
 
     // Get latest test run for trigger
-    const testRuns = testRunRepo.findByTask(parentTaskId);
+    const testRuns = await testRunRepo.findByTask(parentTaskId);
     const latestFailedRun = testRuns.find((r) => r.status === 'fail');
 
     // Create fix subtask
-    const fixTask = taskRepo.create({
+    const fixTask = await taskRepo.create({
       title: `[Fix #${attemptNumber}] ${issueDescription}`,
       parent_id: parentTaskId,
       epic_id: parentTask.epic_id ?? undefined,
@@ -149,7 +149,7 @@ export class TestService {
     });
 
     // Record fix attempt
-    const fixAttempt = fixAttemptRepo.create({
+    const fixAttempt = await fixAttemptRepo.create({
       task_id: parentTaskId,
       attempt_number: attemptNumber,
       trigger_run_id: latestFailedRun?.id,
@@ -158,7 +158,7 @@ export class TestService {
       result_status: 'fail', // starts as fail, updated when tests pass
     });
 
-    activityRepo.create({
+    await activityRepo.create({
       task_id: parentTaskId,
       actor: 'ai',
       action: 'create_fix',
@@ -175,17 +175,17 @@ export class TestService {
   /**
    * get_fix_history: Get all test runs and fix attempts for a task.
    */
-  getFixHistory(taskId: string): {
+  async getFixHistory(taskId: string): Promise<{
     task: Task;
     testRuns: TestRun[];
     fixAttempts: FixAttempt[];
     summary: { totalRuns: number; totalFixes: number; lastResult: string | null };
-  } {
-    const task = taskRepo.findById(taskId);
+  }> {
+    const task = await taskRepo.findById(taskId);
     if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
-    const testRuns = testRunRepo.findByTask(taskId);
-    const fixAttempts = fixAttemptRepo.findByTask(taskId);
+    const testRuns = await testRunRepo.findByTask(taskId);
+    const fixAttempts = await fixAttemptRepo.findByTask(taskId);
 
     const lastRun = testRuns.length > 0 ? testRuns[0] : null;
 
@@ -204,18 +204,18 @@ export class TestService {
   /**
    * escalate_to_human: Force escalation of a task to human.
    */
-  escalateToHuman(
+  async escalateToHuman(
     taskId: string,
     reason: string,
-  ): { task: Task; message: string } {
-    const task = taskRepo.findById(taskId);
+  ): Promise<{ task: Task; message: string }> {
+    const task = await taskRepo.findById(taskId);
     if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
-    const attempts = fixAttemptRepo.getLatestAttemptNumber(taskId);
+    const attempts = await fixAttemptRepo.getLatestAttemptNumber(taskId);
 
-    const updated = taskRepo.updateStatus(taskId, 'blocked', `에스컬레이션: ${reason}`);
+    const updated = await taskRepo.updateStatus(taskId, 'blocked', `에스컬레이션: ${reason}`);
 
-    activityRepo.create({
+    await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'escalate',

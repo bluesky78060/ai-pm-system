@@ -27,13 +27,13 @@ export class GitHubService {
    * link_pr_to_task: Link a PR URL to a task.
    * Updates task.github_pr field and logs activity.
    */
-  linkPrToTask(taskId: string, prUrl: string): { task: Task; message: string } {
-    const task = taskRepo.findById(taskId);
+  async linkPrToTask(taskId: string, prUrl: string): Promise<{ task: Task; message: string }> {
+    const task = await taskRepo.findById(taskId);
     if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
-    const updated = taskRepo.update(taskId, { github_pr: prUrl });
+    const updated = await taskRepo.update(taskId, { github_pr: prUrl });
 
-    activityRepo.create({
+    await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'link_pr',
@@ -62,7 +62,7 @@ export class GitHubService {
     } | null;
     message: string;
   }> {
-    const task = taskRepo.findById(taskId);
+    const task = await taskRepo.findById(taskId);
     if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
     if (!task.github_pr) {
@@ -128,10 +128,10 @@ export class GitHubService {
     projectId: string,
     labels?: string[],
   ): Promise<{ task: Task; issueUrl: string; issueNumber: number; message: string }> {
-    const task = taskRepo.findById(taskId);
+    const task = await taskRepo.findById(taskId);
     if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
-    const project = projectRepo.findById(projectId);
+    const project = await projectRepo.findById(projectId);
     if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
     if (!project.github_repo) throw new Error(`프로젝트에 GitHub 저장소가 설정되지 않았습니다: ${project.name}`);
 
@@ -156,9 +156,9 @@ export class GitHubService {
       labels: labels ?? [],
     });
 
-    const updated = taskRepo.update(taskId, { github_issue: issue.html_url });
+    const updated = await taskRepo.update(taskId, { github_issue: issue.html_url });
 
-    activityRepo.create({
+    await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'create_issue',
@@ -176,15 +176,15 @@ export class GitHubService {
   /**
    * sync_commit_progress: Link a commit to a task and optionally update progress notes.
    */
-  syncCommitProgress(
+  async syncCommitProgress(
     taskId: string,
     commitHash: string,
     notes?: string,
-  ): { task: Task; message: string } {
-    const task = taskRepo.findById(taskId);
+  ): Promise<{ task: Task; message: string }> {
+    const task = await taskRepo.findById(taskId);
     if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
-    activityRepo.create({
+    await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'commit_sync',

@@ -1,4 +1,4 @@
-import { getDb } from '../connection.js';
+import { getPool } from '../connection.js';
 import type { ActivityLog } from '../../types/index.js';
 
 export class ActivityRepository {
@@ -9,40 +9,39 @@ export class ActivityRepository {
     };
   }
 
-  create(data: {
+  async create(data: {
     task_id?: string;
     actor: 'ai' | 'human' | 'github' | 'system';
     action: string;
     payload?: Record<string, unknown>;
-  }): ActivityLog {
-    const db = getDb();
-    const stmt = db.prepare(
-      'INSERT INTO activity_log (task_id, actor, action, payload) VALUES (?, ?, ?, ?)'
+  }): Promise<ActivityLog> {
+    const pool = getPool();
+    const { rows } = await pool.query(
+      'INSERT INTO activity_log (task_id, actor, action, payload) VALUES ($1, $2, $3, $4) RETURNING *',
+      [data.task_id ?? null, data.actor, data.action, data.payload ? JSON.stringify(data.payload) : null]
     );
-    const result = stmt.run(
-      data.task_id ?? null,
-      data.actor,
-      data.action,
-      data.payload ? JSON.stringify(data.payload) : null,
-    );
-    return db.prepare('SELECT * FROM activity_log WHERE id = ?').get(result.lastInsertRowid) as ActivityLog;
+    return rows[0] as ActivityLog;
   }
 
-  findByTask(taskId: string, limit = 50): ActivityLog[] {
-    const db = getDb();
-    const rows = db.prepare('SELECT * FROM activity_log WHERE task_id = ? ORDER BY created_at DESC LIMIT ?').all(taskId, limit) as ActivityLog[];
-    return rows.map(row => this.deserialize(row));
+  async findByTask(taskId: string, limit = 50): Promise<ActivityLog[]> {
+    const { rows } = await getPool().query(
+      'SELECT * FROM activity_log WHERE task_id = $1 ORDER BY created_at DESC LIMIT $2',
+      [taskId, limit]
+    );
+    return rows.map(row => this.deserialize(row as ActivityLog));
   }
 
-  findRecent(limit = 50, filters?: { actor?: string; task_id?: string }): ActivityLog[] {
-    const db = getDb();
+  async findRecent(limit = 50, filters?: { actor?: string; task_id?: string }): Promise<ActivityLog[]> {
     const conditions: string[] = [];
     const values: unknown[] = [];
-    if (filters?.actor) { conditions.push('actor = ?'); values.push(filters.actor); }
-    if (filters?.task_id) { conditions.push('task_id = ?'); values.push(filters.task_id); }
+    let idx = 1;
+    if (filters?.actor) { conditions.push(`actor = $${idx++}`); values.push(filters.actor); }
+    if (filters?.task_id) { conditions.push(`task_id = $${idx++}`); values.push(filters.task_id); }
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     values.push(limit);
-    const rows = db.prepare(`SELECT * FROM activity_log ${where} ORDER BY created_at DESC LIMIT ?`).all(...values) as ActivityLog[];
-    return rows.map(row => this.deserialize(row));
+    const { rows } = await getPool().query(
+      `SELECT * FROM activity_log ${where} ORDER BY created_at DESC LIMIT $${idx}`, values
+    );
+    return rows.map(row => this.deserialize(row as ActivityLog));
   }
 }

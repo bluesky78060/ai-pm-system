@@ -29,7 +29,7 @@ beforeAll(async () => {
   EpicRepository = epicMod.EpicRepository;
   FixAttemptRepository = fixAttemptMod.FixAttemptRepository;
 
-  runMigrations();
+  await runMigrations();
 });
 
 afterAll(() => {
@@ -37,12 +37,12 @@ afterAll(() => {
 });
 
 // Helper: create a project and epic, return their IDs
-function createProjectAndEpic() {
+async function createProjectAndEpic() {
   const projectRepo = new ProjectRepository();
   const epicRepo = new EpicRepository();
 
-  const project = projectRepo.create({ name: 'Test Project' });
-  const epic = epicRepo.create({ project_id: project.id, title: 'Test Epic' });
+  const project = await projectRepo.create({ name: 'Test Project' });
+  const epic = await epicRepo.create({ project_id: project.id, title: 'Test Epic' });
 
   return { projectId: project.id, epicId: epic.id };
 }
@@ -51,11 +51,11 @@ function createProjectAndEpic() {
 // TaskService.create
 // ──────────────────────────────────────────────
 describe('TaskService.create', () => {
-  it('creates a task with required title', () => {
-    const { epicId } = createProjectAndEpic();
+  it('creates a task with required title', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
 
-    const result = svc.create({ title: 'My Task', epic_id: epicId });
+    const result = await svc.create({ title: 'My Task', epic_id: epicId });
 
     expect(result.task).toBeDefined();
     expect(result.task.title).toBe('My Task');
@@ -64,11 +64,11 @@ describe('TaskService.create', () => {
     expect(result.message).toContain('My Task');
   });
 
-  it('creates a task with optional fields', () => {
-    const { epicId } = createProjectAndEpic();
+  it('creates a task with optional fields', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
 
-    const result = svc.create({
+    const result = await svc.create({
       title: 'Task With Options',
       epic_id: epicId,
       description: 'Some description',
@@ -85,10 +85,10 @@ describe('TaskService.create', () => {
     expect(result.task.created_by).toBe('human');
   });
 
-  it('returns a task without epic when epic_id is omitted', () => {
+  it('returns a task without epic when epic_id is omitted', async () => {
     const svc = new TaskService();
 
-    const result = svc.create({ title: 'Standalone Task' });
+    const result = await svc.create({ title: 'Standalone Task' });
 
     expect(result.task).toBeDefined();
     expect(result.task.title).toBe('Standalone Task');
@@ -100,12 +100,12 @@ describe('TaskService.create', () => {
 // TaskService.updateStatus
 // ──────────────────────────────────────────────
 describe('TaskService.updateStatus', () => {
-  it('transitions todo → in_progress', () => {
-    const { epicId } = createProjectAndEpic();
+  it('transitions todo → in_progress', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
-    const { task } = svc.create({ title: 'Status Test 1', epic_id: epicId });
+    const { task } = await svc.create({ title: 'Status Test 1', epic_id: epicId });
 
-    const result = svc.updateStatus(task.id, 'in_progress');
+    const result = await svc.updateStatus(task.id, 'in_progress');
 
     expect(result.previousStatus).toBe('todo');
     expect(result.task.status).toBe('in_progress');
@@ -113,65 +113,65 @@ describe('TaskService.updateStatus', () => {
     expect(result.message).toContain('in_progress');
   });
 
-  it('transitions in_progress → testing', () => {
-    const { epicId } = createProjectAndEpic();
+  it('transitions in_progress → testing', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
-    const { task } = svc.create({ title: 'Status Test 2', epic_id: epicId });
-    svc.updateStatus(task.id, 'in_progress');
+    const { task } = await svc.create({ title: 'Status Test 2', epic_id: epicId });
+    await svc.updateStatus(task.id, 'in_progress');
 
-    const result = svc.updateStatus(task.id, 'testing');
+    const result = await svc.updateStatus(task.id, 'testing');
 
     expect(result.previousStatus).toBe('in_progress');
     expect(result.task.status).toBe('testing');
   });
 
-  it('transitions testing → done is INVALID and throws', () => {
-    const { epicId } = createProjectAndEpic();
+  it('transitions testing → done is INVALID and throws', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
-    const { task } = svc.create({ title: 'Status Test 3', epic_id: epicId });
-    svc.updateStatus(task.id, 'in_progress');
-    svc.updateStatus(task.id, 'testing');
+    const { task } = await svc.create({ title: 'Status Test 3', epic_id: epicId });
+    await svc.updateStatus(task.id, 'in_progress');
+    await svc.updateStatus(task.id, 'testing');
 
-    expect(() => svc.updateStatus(task.id, 'done')).toThrow();
+    await expect(svc.updateStatus(task.id, 'done')).rejects.toThrow();
   });
 
-  it('transitions todo → done is INVALID and throws', () => {
-    const { epicId } = createProjectAndEpic();
+  it('transitions todo → done is INVALID and throws', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
-    const { task } = svc.create({ title: 'Status Test 4', epic_id: epicId });
+    const { task } = await svc.create({ title: 'Status Test 4', epic_id: epicId });
 
-    expect(() => svc.updateStatus(task.id, 'done')).toThrow(/잘못된 상태 전환/);
+    await expect(svc.updateStatus(task.id, 'done')).rejects.toThrow(/잘못된 상태 전환/);
   });
 
-  it('transitions testing → review (valid via fixing path)', () => {
-    const { epicId } = createProjectAndEpic();
+  it('transitions testing → review (valid via fixing path)', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
-    const { task } = svc.create({ title: 'Status Test 5', epic_id: epicId });
-    svc.updateStatus(task.id, 'in_progress');
-    svc.updateStatus(task.id, 'testing');
+    const { task } = await svc.create({ title: 'Status Test 5', epic_id: epicId });
+    await svc.updateStatus(task.id, 'in_progress');
+    await svc.updateStatus(task.id, 'testing');
 
-    const result = svc.updateStatus(task.id, 'review');
+    const result = await svc.updateStatus(task.id, 'review');
 
     expect(result.task.status).toBe('review');
   });
 
-  it('transitions review → done', () => {
-    const { epicId } = createProjectAndEpic();
+  it('transitions review → done', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
-    const { task } = svc.create({ title: 'Status Test 6', epic_id: epicId });
-    svc.updateStatus(task.id, 'in_progress');
-    svc.updateStatus(task.id, 'testing');
-    svc.updateStatus(task.id, 'review');
+    const { task } = await svc.create({ title: 'Status Test 6', epic_id: epicId });
+    await svc.updateStatus(task.id, 'in_progress');
+    await svc.updateStatus(task.id, 'testing');
+    await svc.updateStatus(task.id, 'review');
 
-    const result = svc.updateStatus(task.id, 'done');
+    const result = await svc.updateStatus(task.id, 'done');
 
     expect(result.task.status).toBe('done');
   });
 
-  it('throws when task does not exist', () => {
+  it('throws when task does not exist', async () => {
     const svc = new TaskService();
 
-    expect(() => svc.updateStatus('nonexistent-id', 'in_progress')).toThrow(/태스크를 찾을 수 없습니다/);
+    await expect(svc.updateStatus('nonexistent-id', 'in_progress')).rejects.toThrow(/태스크를 찾을 수 없습니다/);
   });
 });
 
@@ -179,67 +179,67 @@ describe('TaskService.updateStatus', () => {
 // TaskService.setPriority
 // ──────────────────────────────────────────────
 describe('TaskService.setPriority', () => {
-  it('sets a valid priority (1)', () => {
-    const { epicId } = createProjectAndEpic();
+  it('sets a valid priority (1)', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
-    const { task } = svc.create({ title: 'Priority Test 1', epic_id: epicId, priority: 3 });
+    const { task } = await svc.create({ title: 'Priority Test 1', epic_id: epicId, priority: 3 });
 
-    const result = svc.setPriority(task.id, 1, 'urgent');
+    const result = await svc.setPriority(task.id, 1, 'urgent');
 
     expect(result.task.priority).toBe(1);
     expect(result.previousPriority).toBe(3);
     expect(result.message).toContain('1');
   });
 
-  it('sets a valid priority (5)', () => {
-    const { epicId } = createProjectAndEpic();
+  it('sets a valid priority (5)', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
-    const { task } = svc.create({ title: 'Priority Test 2', epic_id: epicId, priority: 1 });
+    const { task } = await svc.create({ title: 'Priority Test 2', epic_id: epicId, priority: 1 });
 
-    const result = svc.setPriority(task.id, 5, 'low importance');
+    const result = await svc.setPriority(task.id, 5, 'low importance');
 
     expect(result.task.priority).toBe(5);
     expect(result.previousPriority).toBe(1);
   });
 
-  it('sets a valid priority (3, midpoint)', () => {
-    const { epicId } = createProjectAndEpic();
+  it('sets a valid priority (3, midpoint)', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
-    const { task } = svc.create({ title: 'Priority Test 3', epic_id: epicId, priority: 1 });
+    const { task } = await svc.create({ title: 'Priority Test 3', epic_id: epicId, priority: 1 });
 
-    const result = svc.setPriority(task.id, 3, 'rebalanced');
+    const result = await svc.setPriority(task.id, 3, 'rebalanced');
 
     expect(result.task.priority).toBe(3);
   });
 
-  it('throws for priority 0 (below minimum)', () => {
-    const { epicId } = createProjectAndEpic();
+  it('throws for priority 0 (below minimum)', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
-    const { task } = svc.create({ title: 'Priority Test 4', epic_id: epicId });
+    const { task } = await svc.create({ title: 'Priority Test 4', epic_id: epicId });
 
-    expect(() => svc.setPriority(task.id, 0, 'invalid')).toThrow(/우선순위는 1~5/);
+    await expect(svc.setPriority(task.id, 0, 'invalid')).rejects.toThrow(/우선순위는 1~5/);
   });
 
-  it('throws for priority 6 (above maximum)', () => {
-    const { epicId } = createProjectAndEpic();
+  it('throws for priority 6 (above maximum)', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
-    const { task } = svc.create({ title: 'Priority Test 5', epic_id: epicId });
+    const { task } = await svc.create({ title: 'Priority Test 5', epic_id: epicId });
 
-    expect(() => svc.setPriority(task.id, 6, 'invalid')).toThrow(/우선순위는 1~5/);
+    await expect(svc.setPriority(task.id, 6, 'invalid')).rejects.toThrow(/우선순위는 1~5/);
   });
 
-  it('throws for negative priority', () => {
-    const { epicId } = createProjectAndEpic();
+  it('throws for negative priority', async () => {
+    const { epicId } = await createProjectAndEpic();
     const svc = new TaskService();
-    const { task } = svc.create({ title: 'Priority Test 6', epic_id: epicId });
+    const { task } = await svc.create({ title: 'Priority Test 6', epic_id: epicId });
 
-    expect(() => svc.setPriority(task.id, -1, 'negative')).toThrow(/우선순위는 1~5/);
+    await expect(svc.setPriority(task.id, -1, 'negative')).rejects.toThrow(/우선순위는 1~5/);
   });
 
-  it('throws when task does not exist', () => {
+  it('throws when task does not exist', async () => {
     const svc = new TaskService();
 
-    expect(() => svc.setPriority('nonexistent-id', 3, 'reason')).toThrow(/태스크를 찾을 수 없습니다/);
+    await expect(svc.setPriority('nonexistent-id', 3, 'reason')).rejects.toThrow(/태스크를 찾을 수 없습니다/);
   });
 });
 
@@ -247,33 +247,33 @@ describe('TaskService.setPriority', () => {
 // TestService.reportTestResult
 // ──────────────────────────────────────────────
 describe('TestService.reportTestResult', () => {
-  it('pass: sets task status to review', () => {
-    const { epicId } = createProjectAndEpic();
+  it('pass: sets task status to review', async () => {
+    const { epicId } = await createProjectAndEpic();
     const taskSvc = new TaskService();
     const testSvc = new TestService();
 
-    const { task } = taskSvc.create({ title: 'Test Result Pass', epic_id: epicId });
+    const { task } = await taskSvc.create({ title: 'Test Result Pass', epic_id: epicId });
     // Move task to testing so that the status change is valid at the repo level
-    taskSvc.updateStatus(task.id, 'in_progress');
-    taskSvc.updateStatus(task.id, 'testing');
+    await taskSvc.updateStatus(task.id, 'in_progress');
+    await taskSvc.updateStatus(task.id, 'testing');
 
-    const result = testSvc.reportTestResult(task.id, 'pass');
+    const result = await testSvc.reportTestResult(task.id, 'pass');
 
     expect(result.task.status).toBe('review');
     expect(result.action).toBe('moved_to_review');
     expect(result.message).toContain('review');
   });
 
-  it('fail with 0 prior attempts: sets task status to fixing', () => {
-    const { epicId } = createProjectAndEpic();
+  it('fail with 0 prior attempts: sets task status to fixing', async () => {
+    const { epicId } = await createProjectAndEpic();
     const taskSvc = new TaskService();
     const testSvc = new TestService();
 
-    const { task } = taskSvc.create({ title: 'Test Result Fail 1', epic_id: epicId });
-    taskSvc.updateStatus(task.id, 'in_progress');
-    taskSvc.updateStatus(task.id, 'testing');
+    const { task } = await taskSvc.create({ title: 'Test Result Fail 1', epic_id: epicId });
+    await taskSvc.updateStatus(task.id, 'in_progress');
+    await taskSvc.updateStatus(task.id, 'testing');
 
-    const result = testSvc.reportTestResult(task.id, 'fail', [
+    const result = await testSvc.reportTestResult(task.id, 'fail', [
       { message: 'assertion failed at line 42' },
     ]);
 
@@ -282,51 +282,51 @@ describe('TestService.reportTestResult', () => {
     expect(result.message).toContain('fixing');
   });
 
-  it('fail with 2 prior attempts (< MAX): sets task status to fixing', () => {
-    const { epicId } = createProjectAndEpic();
+  it('fail with 2 prior attempts (< MAX): sets task status to fixing', async () => {
+    const { epicId } = await createProjectAndEpic();
     const taskSvc = new TaskService();
     const testSvc = new TestService();
     const fixRepo = new FixAttemptRepository();
 
-    const { task } = taskSvc.create({ title: 'Test Result Fail 2', epic_id: epicId });
-    taskSvc.updateStatus(task.id, 'in_progress');
-    taskSvc.updateStatus(task.id, 'testing');
+    const { task } = await taskSvc.create({ title: 'Test Result Fail 2', epic_id: epicId });
+    await taskSvc.updateStatus(task.id, 'in_progress');
+    await taskSvc.updateStatus(task.id, 'testing');
 
     // Insert 2 existing fix attempts manually
-    fixRepo.create({ task_id: task.id, attempt_number: 1, result_status: 'fail' });
-    fixRepo.create({ task_id: task.id, attempt_number: 2, result_status: 'fail' });
+    await fixRepo.create({ task_id: task.id, attempt_number: 1, result_status: 'fail' });
+    await fixRepo.create({ task_id: task.id, attempt_number: 2, result_status: 'fail' });
 
-    const result = testSvc.reportTestResult(task.id, 'fail');
+    const result = await testSvc.reportTestResult(task.id, 'fail');
 
     expect(result.task.status).toBe('fixing');
     expect(result.action).toBe('moved_to_fixing');
   });
 
-  it('fail with MAX (3) prior attempts: escalates to blocked', () => {
-    const { epicId } = createProjectAndEpic();
+  it('fail with MAX (3) prior attempts: escalates to blocked', async () => {
+    const { epicId } = await createProjectAndEpic();
     const taskSvc = new TaskService();
     const testSvc = new TestService();
     const fixRepo = new FixAttemptRepository();
 
-    const { task } = taskSvc.create({ title: 'Test Result Fail Escalate', epic_id: epicId });
-    taskSvc.updateStatus(task.id, 'in_progress');
-    taskSvc.updateStatus(task.id, 'testing');
+    const { task } = await taskSvc.create({ title: 'Test Result Fail Escalate', epic_id: epicId });
+    await taskSvc.updateStatus(task.id, 'in_progress');
+    await taskSvc.updateStatus(task.id, 'testing');
 
     // Insert 3 existing fix attempts (MAX_FIX_ATTEMPTS = 3)
-    fixRepo.create({ task_id: task.id, attempt_number: 1, result_status: 'fail' });
-    fixRepo.create({ task_id: task.id, attempt_number: 2, result_status: 'fail' });
-    fixRepo.create({ task_id: task.id, attempt_number: 3, result_status: 'fail' });
+    await fixRepo.create({ task_id: task.id, attempt_number: 1, result_status: 'fail' });
+    await fixRepo.create({ task_id: task.id, attempt_number: 2, result_status: 'fail' });
+    await fixRepo.create({ task_id: task.id, attempt_number: 3, result_status: 'fail' });
 
-    const result = testSvc.reportTestResult(task.id, 'fail');
+    const result = await testSvc.reportTestResult(task.id, 'fail');
 
     expect(result.task.status).toBe('blocked');
     expect(result.action).toBe('escalated');
     expect(result.message).toContain('에스컬레이션');
   });
 
-  it('throws when task does not exist', () => {
+  it('throws when task does not exist', async () => {
     const testSvc = new TestService();
 
-    expect(() => testSvc.reportTestResult('nonexistent-id', 'pass')).toThrow(/태스크를 찾을 수 없습니다/);
+    await expect(testSvc.reportTestResult('nonexistent-id', 'pass')).rejects.toThrow(/태스크를 찾을 수 없습니다/);
   });
 });

@@ -1,5 +1,4 @@
-import { getDb } from './connection.js';
-import { generateProjectCode } from '../utils/code-gen.js';
+import { getPool } from './connection.js';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -9,9 +8,11 @@ CREATE TABLE IF NOT EXISTS projects (
   status      TEXT NOT NULL DEFAULT 'active'
               CHECK(status IN ('active', 'archived')),
   github_repo TEXT,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  code        TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_code ON projects(code) WHERE code IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS epics (
   id          TEXT PRIMARY KEY,
@@ -22,10 +23,11 @@ CREATE TABLE IF NOT EXISTS epics (
               CHECK(status IN ('todo', 'in_progress', 'done')),
   priority    INTEGER NOT NULL DEFAULT 3 CHECK(priority BETWEEN 1 AND 5),
   order_index INTEGER NOT NULL DEFAULT 0,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  seq         INTEGER,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_epics_project ON epics(project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_epics_project_seq ON epics(project_id, seq) WHERE seq IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS tasks (
   id            TEXT PRIMARY KEY,
@@ -44,14 +46,17 @@ CREATE TABLE IF NOT EXISTS tasks (
   blocked_by    TEXT,
   created_by    TEXT NOT NULL DEFAULT 'human'
                 CHECK(created_by IN ('ai', 'human')),
-  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-  completed_at  TEXT
+  seq           INTEGER,
+  ticket_code   TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at  TIMESTAMPTZ
 );
-
 CREATE INDEX IF NOT EXISTS idx_tasks_epic ON tasks(epic_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_ticket_code ON tasks(ticket_code) WHERE ticket_code IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_epic_seq ON tasks(epic_id, seq) WHERE epic_id IS NOT NULL AND seq IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS task_dependencies (
   task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -61,14 +66,13 @@ CREATE TABLE IF NOT EXISTS task_dependencies (
 );
 
 CREATE TABLE IF NOT EXISTS activity_log (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  id         SERIAL PRIMARY KEY,
   task_id    TEXT REFERENCES tasks(id) ON DELETE SET NULL,
-  actor      TEXT NOT NULL CHECK(actor IN ('ai', 'human', 'github')),
+  actor      TEXT NOT NULL CHECK(actor IN ('ai', 'human', 'github', 'system')),
   action     TEXT NOT NULL,
   payload    TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_activity_task ON activity_log(task_id);
 CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_log(created_at);
 
@@ -83,9 +87,8 @@ CREATE TABLE IF NOT EXISTS test_runs (
   output       TEXT,
   failures     TEXT,
   duration_ms  INTEGER,
-  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_test_runs_task ON test_runs(task_id);
 
 CREATE TABLE IF NOT EXISTS fix_attempts (
@@ -97,124 +100,38 @@ CREATE TABLE IF NOT EXISTS fix_attempts (
   fix_description TEXT,
   result_status   TEXT NOT NULL
                   CHECK(result_status IN ('pass', 'fail', 'escalated')),
-  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX IF NOT EXISTS idx_fix_attempts_task ON fix_attempts(task_id);
+
+CREATE TABLE IF NOT EXISTS automation_rules (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  trigger_event TEXT NOT NULL CHECK(trigger_event IN ('epic_completed', 'task_stale', 'all_tests_pass', 'status_change')),
+  condition     TEXT,
+  action_type   TEXT NOT NULL CHECK(action_type IN ('notify', 'auto_transition', 'create_task')),
+  action_config TEXT,
+  enabled       BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_automation_rules_project ON automation_rules(project_id);
+CREATE INDEX IF NOT EXISTS idx_automation_rules_trigger ON automation_rules(trigger_event);
 `;
 
-const MIGRATIONS = [
-  // v2: Add ticket code system (code, seq, ticket_code)
-  {
-    id: 'v2_ticket_codes',
-    sql: `
-      ALTER TABLE projects ADD COLUMN code TEXT;
-      ALTER TABLE epics ADD COLUMN seq INTEGER;
-      ALTER TABLE tasks ADD COLUMN seq INTEGER;
-      ALTER TABLE tasks ADD COLUMN ticket_code TEXT;
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_code ON projects(code) WHERE code IS NOT NULL;
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_ticket_code ON tasks(ticket_code) WHERE ticket_code IS NOT NULL;
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_epic_seq ON tasks(epic_id, seq) WHERE epic_id IS NOT NULL AND seq IS NOT NULL;
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_epics_project_seq ON epics(project_id, seq) WHERE seq IS NOT NULL;
-    `,
-    backfill: (db: ReturnType<typeof getDb>) => {
-      // Backfill project codes from existing names
-      const projects = db.prepare('SELECT id, name FROM projects WHERE code IS NULL').all() as { id: string; name: string }[];
-      for (const p of projects) {
-        const code = generateProjectCode(p.name);
-        let finalCode = code;
-        let suffix = 1;
-        while (db.prepare('SELECT 1 FROM projects WHERE code = ? AND id != ?').get(finalCode, p.id)) {
-          if (suffix > 999) break;
-          finalCode = `${code}${suffix++}`;
-        }
-        db.prepare('UPDATE projects SET code = ? WHERE id = ?').run(finalCode, p.id);
-      }
-      // Backfill epic seq
-      const epicsByProject = db.prepare('SELECT id, project_id FROM epics WHERE seq IS NULL ORDER BY order_index').all() as { id: string; project_id: string }[];
-      const epicSeqMap = new Map<string, number>();
-      for (const e of epicsByProject) {
-        const nextSeq = (epicSeqMap.get(e.project_id) ?? 0) + 1;
-        epicSeqMap.set(e.project_id, nextSeq);
-        db.prepare('UPDATE epics SET seq = ? WHERE id = ?').run(nextSeq, e.id);
-      }
-      // Backfill task seq and ticket_code
-      const tasks = db.prepare(`
-        SELECT t.id, t.epic_id, e.seq as epic_seq, p.code as project_code
-        FROM tasks t
-        LEFT JOIN epics e ON t.epic_id = e.id
-        LEFT JOIN projects p ON e.project_id = p.id
-        WHERE t.seq IS NULL
-        ORDER BY t.created_at
-      `).all() as { id: string; epic_id: string | null; epic_seq: number | null; project_code: string | null }[];
-      const taskSeqMap = new Map<string, number>();
-      for (const t of tasks) {
-        const epicKey = t.epic_id ?? '__orphan__';
-        const nextSeq = (taskSeqMap.get(epicKey) ?? 0) + 1;
-        taskSeqMap.set(epicKey, nextSeq);
-        const ticketCode = t.project_code && t.epic_seq
-          ? `${t.project_code}-${t.epic_seq}-${nextSeq}`
-          : null;
-        db.prepare('UPDATE tasks SET seq = ?, ticket_code = ? WHERE id = ?').run(nextSeq, ticketCode, t.id);
-      }
-    },
-  },
-  // v3: Add automation rules table
-  {
-    id: 'v3_automation_rules',
-    sql: `
-      CREATE TABLE IF NOT EXISTS automation_rules (
-        id            TEXT PRIMARY KEY,
-        project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-        name          TEXT NOT NULL,
-        trigger_event TEXT NOT NULL CHECK(trigger_event IN ('epic_completed', 'task_stale', 'all_tests_pass', 'status_change')),
-        condition     TEXT,
-        action_type   TEXT NOT NULL CHECK(action_type IN ('notify', 'auto_transition', 'create_task')),
-        action_config TEXT,
-        enabled       INTEGER NOT NULL DEFAULT 1,
-        created_at    TEXT NOT NULL DEFAULT (datetime('now'))
-      );
-      CREATE INDEX IF NOT EXISTS idx_automation_rules_project ON automation_rules(project_id);
-      CREATE INDEX IF NOT EXISTS idx_automation_rules_trigger ON automation_rules(trigger_event);
-    `,
-  },
-  // v4: Extend activity_log actor to include 'system'
-  {
-    id: 'v4_activity_log_system_actor',
-    sql: `
-      CREATE TABLE IF NOT EXISTS activity_log_new (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        task_id    TEXT REFERENCES tasks(id) ON DELETE SET NULL,
-        actor      TEXT NOT NULL CHECK(actor IN ('ai', 'human', 'github', 'system')),
-        action     TEXT NOT NULL,
-        payload    TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      );
-      INSERT INTO activity_log_new SELECT * FROM activity_log;
-      DROP TABLE activity_log;
-      ALTER TABLE activity_log_new RENAME TO activity_log;
-      CREATE INDEX IF NOT EXISTS idx_activity_task ON activity_log(task_id);
-      CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_log(created_at);
-    `,
-  },
-];
+export async function runMigrations(): Promise<void> {
+  const pool = getPool();
 
-export function runMigrations(): void {
-  const db = getDb();
-  db.exec(SCHEMA);
-
-  // Ensure migrations tracking table
-  db.exec('CREATE TABLE IF NOT EXISTS _migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime(\'now\')))');
-
-  for (const migration of MIGRATIONS) {
-    const applied = db.prepare('SELECT 1 FROM _migrations WHERE id = ?').get(migration.id);
-    if (applied) continue;
-
-    const runMigration = db.transaction(() => {
-      db.exec(migration.sql);
-      if (migration.backfill) migration.backfill(db);
-      db.prepare('INSERT INTO _migrations (id) VALUES (?)').run(migration.id);
-    });
-    runMigration();
+  // Execute each statement separately to handle "already exists" gracefully
+  const statements = SCHEMA.split(';').map(s => s.trim()).filter(s => s.length > 0);
+  for (const stmt of statements) {
+    try {
+      await pool.query(stmt);
+    } catch (err: unknown) {
+      const pgErr = err as { code?: string };
+      // 42P07 = relation already exists, 42710 = index already exists
+      if (pgErr.code === '42P07' || pgErr.code === '42710') continue;
+      throw err;
+    }
   }
 }

@@ -23,14 +23,14 @@ export class AutomationService {
   private automationRepo = new AutomationRepository();
   private activityRepo = new ActivityRepository();
 
-  createRule(
+  async createRule(
     projectId: string,
     name: string,
     trigger_event: AutomationTrigger,
     action_type: AutomationAction,
     condition?: string,
     action_config?: string,
-  ): AutomationRule {
+  ): Promise<AutomationRule> {
     return this.automationRepo.create({
       id: uuid(),
       project_id: projectId,
@@ -43,24 +43,24 @@ export class AutomationService {
     });
   }
 
-  listRules(projectId: string): AutomationRule[] {
+  async listRules(projectId: string): Promise<AutomationRule[]> {
     return this.automationRepo.findByProject(projectId);
   }
 
-  deleteRule(id: string): void {
-    this.automationRepo.delete(id);
+  async deleteRule(id: string): Promise<void> {
+    await this.automationRepo.delete(id);
   }
 
-  toggleRule(id: string): AutomationRule {
+  async toggleRule(id: string): Promise<AutomationRule> {
     return this.automationRepo.toggle(id);
   }
 
-  evaluateRules(
+  async evaluateRules(
     projectId: string,
     event: string,
     context: Record<string, unknown>,
-  ): EvaluateRulesResult {
-    const rules = this.automationRepo.findByTrigger(projectId, event);
+  ): Promise<EvaluateRulesResult> {
+    const rules = await this.automationRepo.findByTrigger(projectId, event);
     const results: EvaluationResult[] = [];
 
     for (const rule of rules) {
@@ -116,7 +116,7 @@ export class AutomationService {
     const triggered = results.filter(r => r.triggered);
 
     if (triggered.length > 0) {
-      this.activityRepo.create({
+      await this.activityRepo.create({
         actor: 'system',
         action: 'automation_triggered',
         payload: {

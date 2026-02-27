@@ -41,9 +41,6 @@ function classifyError(error: Error): { code: string; message: string } {
 
 // Initialize: local mode only (remote mode skips DB)
 const remote = isRemoteMode();
-if (!remote) {
-  runMigrations();
-}
 
 const projectService = remote ? null! : new ProjectService();
 const taskService = remote ? null! : new TaskService();
@@ -503,7 +500,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     switch (name) {
       // Project tools
       case 'create_project': {
-        result = projectService.create({
+        result = await projectService.create({
           name: args?.name as string,
           description: args?.description as string | undefined,
           github_repo: args?.github_repo as string | undefined,
@@ -511,18 +508,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case 'list_projects': {
-        result = { projects: projectService.getAll() };
+        result = { projects: await projectService.getAll() };
         break;
       }
       case 'get_project': {
-        const project = projectService.getById(args?.project_id as string);
+        const project = await projectService.getById(args?.project_id as string);
         if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${args?.project_id}`);
-        const epics = projectService.getEpics(project.id);
+        const epics = await projectService.getEpics(project.id);
         result = { project, epics };
         break;
       }
       case 'create_epic': {
-        result = projectService.createEpic({
+        result = await projectService.createEpic({
           project_id: args?.project_id as string,
           title: args?.title as string,
           description: args?.description as string | undefined,
@@ -532,7 +529,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       // Task tools
       case 'create_task': {
-        result = taskService.create({
+        result = await taskService.create({
           title: args?.title as string,
           epic_id: args?.epic_id as string | undefined,
           description: args?.description as string | undefined,
@@ -544,14 +541,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case 'decompose_task': {
-        result = taskService.decompose(
+        result = await taskService.decompose(
           args?.task_id as string,
           args?.subtasks as { title: string; description?: string; priority?: number; estimated_hrs?: number }[],
         );
         break;
       }
       case 'update_task_status': {
-        result = taskService.updateStatus(
+        result = await taskService.updateStatus(
           args?.task_id as string,
           args?.status as string,
           args?.notes as string | undefined,
@@ -559,7 +556,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case 'set_priority': {
-        result = taskService.setPriority(
+        result = await taskService.setPriority(
           args?.task_id as string,
           args?.priority as number,
           args?.reason as string,
@@ -567,22 +564,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case 'add_dependency': {
-        result = taskService.addDependency(
+        result = await taskService.addDependency(
           args?.task_id as string,
           args?.depends_on_id as string,
         );
         break;
       }
       case 'get_task': {
-        const task = taskService.getById(args?.task_id as string);
+        const task = await taskService.getById(args?.task_id as string);
         if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${args?.task_id}`);
-        const subtasks = taskService.getSubtasks(task.id);
+        const subtasks = await taskService.getSubtasks(task.id);
         result = { task, subtasks };
         break;
       }
       case 'list_tasks': {
         result = {
-          tasks: taskService.getAll({
+          tasks: await taskService.getAll({
             project_id: args?.project_id as string | undefined,
             epic_id: args?.epic_id as string | undefined,
             status: args?.status as string | undefined,
@@ -593,27 +590,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       // Context tools (Phase 2)
       case 'get_session_context': {
-        result = contextService.getSessionContext(args?.project_id as string);
+        result = await contextService.getSessionContext(args?.project_id as string);
         break;
       }
       case 'get_project_status': {
-        result = contextService.getProjectStatus(args?.project_id as string);
+        result = await contextService.getProjectStatus(args?.project_id as string);
         break;
       }
       case 'get_blocking_analysis': {
-        result = contextService.getBlockingAnalysis(args?.project_id as string);
+        result = await contextService.getBlockingAnalysis(args?.project_id as string);
         break;
       }
       // Test & Fix tools (Phase 3)
       case 'run_tests': {
-        result = testService.runTests(
+        result = await testService.runTests(
           args?.task_id as string,
           args?.results as { test_type: string; status: string; output?: string; failures?: string; duration_ms?: number }[],
         );
         break;
       }
       case 'report_test_result': {
-        result = testService.reportTestResult(
+        result = await testService.reportTestResult(
           args?.task_id as string,
           args?.result as 'pass' | 'fail',
           args?.failures as { file?: string; line?: number; message: string }[] | undefined,
@@ -621,7 +618,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case 'create_fix_task': {
-        result = testService.createFixTask(
+        result = await testService.createFixTask(
           args?.parent_task_id as string,
           args?.issue_description as string,
           args?.files_changed as { path: string; diff?: string }[] | undefined,
@@ -629,11 +626,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case 'get_fix_history': {
-        result = testService.getFixHistory(args?.task_id as string);
+        result = await testService.getFixHistory(args?.task_id as string);
         break;
       }
       case 'escalate_to_human': {
-        result = testService.escalateToHuman(
+        result = await testService.escalateToHuman(
           args?.task_id as string,
           args?.reason as string,
         );
@@ -641,7 +638,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       // GitHub tools (Phase 4)
       case 'link_pr_to_task': {
-        result = githubService.linkPrToTask(
+        result = await githubService.linkPrToTask(
           args?.task_id as string,
           args?.pr_url as string,
         );
@@ -660,7 +657,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       }
       case 'sync_commit_progress': {
-        result = githubService.syncCommitProgress(
+        result = await githubService.syncCommitProgress(
           args?.task_id as string,
           args?.commit_hash as string,
           args?.notes as string | undefined,
@@ -669,21 +666,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       // Activity tools
       case 'get_task_activities': {
-        const task = taskService.getById(args?.task_id as string);
+        const task = await taskService.getById(args?.task_id as string);
         if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${args?.task_id}`);
         const limit = (args?.limit as number) || 20;
-        result = { activities: activityRepo.findByTask(task.id, limit) };
+        result = { activities: await activityRepo.findByTask(task.id, limit) };
         break;
       }
       case 'get_project_activities': {
         const projectId = args?.project_id as string;
         const projLimit = (args?.limit as number) || 30;
-        const tasks = taskService.getAll({ project_id: projectId });
+        const tasks = await taskService.getAll({ project_id: projectId });
         const taskIds = tasks.map(t => t.id);
         if (taskIds.length === 0) {
           result = { activities: [] };
         } else {
-          const allActivities = taskIds.flatMap(tid => activityRepo.findByTask(tid, projLimit));
+          const activityArrays = await Promise.all(taskIds.map(tid => activityRepo.findByTask(tid, projLimit)));
+          const allActivities = activityArrays.flat();
           allActivities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
           result = { activities: allActivities.slice(0, projLimit) };
         }
@@ -694,19 +692,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const action = args?.action as string;
         switch (action) {
           case 'start_work':
-            result = workflowService.startWork(args?.task_id as string);
+            result = await workflowService.startWork(args?.task_id as string);
             break;
           case 'submit_test':
-            result = workflowService.submitTest(
+            result = await workflowService.submitTest(
               args?.task_id as string,
               args?.test_results as { test_type: string; status: string; output?: string; failures?: string; duration_ms?: number }[],
             );
             break;
           case 'complete_fix':
-            result = workflowService.completeFix(args?.task_id as string, args?.notes as string | undefined);
+            result = await workflowService.completeFix(args?.task_id as string, args?.notes as string | undefined);
             break;
           case 'approve_review':
-            result = workflowService.approveReview(args?.task_id as string, args?.notes as string | undefined);
+            result = await workflowService.approveReview(args?.task_id as string, args?.notes as string | undefined);
             break;
           default:
             throw new Error(`알 수 없는 워크플로우 액션: ${action}`);
@@ -717,13 +715,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const analysisType = args?.analysis_type as string;
         switch (analysisType) {
           case 'daily_report':
-            result = analysisService.dailyReport(args?.project_id as string);
+            result = await analysisService.dailyReport(args?.project_id as string);
             break;
           case 'bottleneck':
-            result = analysisService.bottleneck(args?.project_id as string);
+            result = await analysisService.bottleneck(args?.project_id as string);
             break;
           case 'velocity':
-            result = analysisService.velocity(args?.project_id as string);
+            result = await analysisService.velocity(args?.project_id as string);
             break;
           default:
             throw new Error(`알 수 없는 분석 타입: ${analysisType}`);
@@ -734,10 +732,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const automationAction = args?.action as string;
         switch (automationAction) {
           case 'list':
-            result = { rules: automationService.listRules(args?.project_id as string) };
+            result = { rules: await automationService.listRules(args?.project_id as string) };
             break;
           case 'create':
-            result = automationService.createRule(
+            result = await automationService.createRule(
               args?.project_id as string,
               args?.name as string,
               args?.trigger_event as AutomationTrigger,
@@ -747,11 +745,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             );
             break;
           case 'delete':
-            automationService.deleteRule(args?.rule_id as string);
+            await automationService.deleteRule(args?.rule_id as string);
             result = { message: '규칙 삭제 완료' };
             break;
           case 'toggle':
-            result = automationService.toggleRule(args?.rule_id as string);
+            result = await automationService.toggleRule(args?.rule_id as string);
             break;
           default:
             throw new Error(`알 수 없는 자동화 액션: ${automationAction}`);
@@ -777,6 +775,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start server
 async function main() {
+  if (!remote) {
+    await runMigrations();
+  }
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('AI PM MCP Server running on stdio');

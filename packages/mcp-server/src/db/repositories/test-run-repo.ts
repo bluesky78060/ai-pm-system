@@ -1,25 +1,28 @@
 import { v4 as uuid } from 'uuid';
-import { getDb } from '../connection.js';
+import { getPool } from '../connection.js';
 import type { TestRun } from '../../types/index.js';
 
 export class TestRunRepository {
-  findById(id: string): TestRun | undefined {
-    const db = getDb();
-    return db.prepare('SELECT * FROM test_runs WHERE id = ?').get(id) as TestRun | undefined;
+  async findById(id: string): Promise<TestRun | undefined> {
+    const { rows } = await getPool().query('SELECT * FROM test_runs WHERE id = $1', [id]);
+    return rows[0] as TestRun | undefined;
   }
 
-  findByTask(taskId: string): TestRun[] {
-    const db = getDb();
-    return db.prepare('SELECT * FROM test_runs WHERE task_id = ? ORDER BY run_number DESC, created_at DESC').all(taskId) as TestRun[];
+  async findByTask(taskId: string): Promise<TestRun[]> {
+    const { rows } = await getPool().query(
+      'SELECT * FROM test_runs WHERE task_id = $1 ORDER BY run_number DESC, created_at DESC', [taskId]
+    );
+    return rows as TestRun[];
   }
 
-  getLatestRunNumber(taskId: string): number {
-    const db = getDb();
-    const row = db.prepare('SELECT COALESCE(MAX(run_number), 0) as max_run FROM test_runs WHERE task_id = ?').get(taskId) as { max_run: number };
+  async getLatestRunNumber(taskId: string): Promise<number> {
+    const { rows: [row] } = await getPool().query(
+      'SELECT COALESCE(MAX(run_number), 0) as max_run FROM test_runs WHERE task_id = $1', [taskId]
+    );
     return row.max_run;
   }
 
-  create(data: {
+  async create(data: {
     task_id: string;
     run_number: number;
     test_type: string;
@@ -27,30 +30,23 @@ export class TestRunRepository {
     output?: string;
     failures?: string;
     duration_ms?: number;
-  }): TestRun {
-    const db = getDb();
+  }): Promise<TestRun> {
+    const pool = getPool();
     const id = uuid();
-    db.prepare(`
+    await pool.query(`
       INSERT INTO test_runs (id, task_id, run_number, test_type, status, output, failures, duration_ms)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      data.task_id,
-      data.run_number,
-      data.test_type,
-      data.status,
-      data.output ?? null,
-      data.failures ?? null,
-      data.duration_ms ?? null,
-    );
-    return this.findById(id)!;
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `, [
+      id, data.task_id, data.run_number, data.test_type,
+      data.status, data.output ?? null, data.failures ?? null, data.duration_ms ?? null,
+    ]);
+    return (await this.findById(id))!;
   }
 
-  countByTaskAndStatus(taskId: string): Record<string, number> {
-    const db = getDb();
-    const rows = db.prepare(`
-      SELECT status, COUNT(*) as count FROM test_runs WHERE task_id = ? GROUP BY status
-    `).all(taskId) as { status: string; count: number }[];
+  async countByTaskAndStatus(taskId: string): Promise<Record<string, number>> {
+    const { rows } = await getPool().query(`
+      SELECT status, COUNT(*)::int as count FROM test_runs WHERE task_id = $1 GROUP BY status
+    `, [taskId]);
     const result: Record<string, number> = {};
     for (const row of rows) {
       result[row.status] = row.count;

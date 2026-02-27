@@ -9,18 +9,18 @@ const epicRepo = new EpicRepository();
 const activityRepo = new ActivityRepository();
 
 export class ProjectService {
-  getAll(): Project[] {
+  async getAll(): Promise<Project[]> {
     return projectRepo.findAll();
   }
 
-  getById(idOrCode: string): Project | undefined {
+  async getById(idOrCode: string): Promise<Project | undefined> {
     if (UUID_REGEX.test(idOrCode)) return projectRepo.findById(idOrCode);
     return projectRepo.findByCode(idOrCode);
   }
 
-  create(data: { name: string; description?: string; github_repo?: string }): Project {
-    const project = projectRepo.create(data);
-    activityRepo.create({
+  async create(data: { name: string; description?: string; github_repo?: string }): Promise<Project> {
+    const project = await projectRepo.create(data);
+    await activityRepo.create({
       actor: 'human',
       action: 'create',
       payload: { type: 'project', projectId: project.id, name: project.name },
@@ -28,17 +28,17 @@ export class ProjectService {
     return project;
   }
 
-  update(id: string, data: Partial<Pick<Project, 'name' | 'description' | 'status' | 'github_repo'>>): Project {
+  async update(id: string, data: Partial<Pick<Project, 'name' | 'description' | 'status' | 'github_repo'>>): Promise<Project> {
     return projectRepo.update(id, data);
   }
 
-  getEpics(projectId: string): Epic[] {
+  async getEpics(projectId: string): Promise<Epic[]> {
     return epicRepo.findByProject(projectId);
   }
 
-  createEpic(data: { project_id: string; title: string; description?: string; priority?: number }): Epic {
-    const epic = epicRepo.create(data);
-    activityRepo.create({
+  async createEpic(data: { project_id: string; title: string; description?: string; priority?: number }): Promise<Epic> {
+    const epic = await epicRepo.create(data);
+    await activityRepo.create({
       actor: 'human',
       action: 'create',
       payload: { type: 'epic', epicId: epic.id, title: epic.title },
@@ -46,7 +46,7 @@ export class ProjectService {
     return epic;
   }
 
-  updateEpic(id: string, data: Partial<Pick<Epic, 'title' | 'description' | 'status' | 'priority' | 'order_index'>>): Epic {
+  async updateEpic(id: string, data: Partial<Pick<Epic, 'title' | 'description' | 'status' | 'priority' | 'order_index'>>): Promise<Epic> {
     return epicRepo.update(id, data);
   }
 }

@@ -1,46 +1,45 @@
 import { v4 as uuid } from 'uuid';
-import { getDb } from '../connection.js';
+import { getPool } from '../connection.js';
 import type { FixAttempt } from '../../types/index.js';
 
 export class FixAttemptRepository {
-  findById(id: string): FixAttempt | undefined {
-    const db = getDb();
-    return db.prepare('SELECT * FROM fix_attempts WHERE id = ?').get(id) as FixAttempt | undefined;
+  async findById(id: string): Promise<FixAttempt | undefined> {
+    const { rows } = await getPool().query('SELECT * FROM fix_attempts WHERE id = $1', [id]);
+    return rows[0] as FixAttempt | undefined;
   }
 
-  findByTask(taskId: string): FixAttempt[] {
-    const db = getDb();
-    return db.prepare('SELECT * FROM fix_attempts WHERE task_id = ? ORDER BY attempt_number DESC').all(taskId) as FixAttempt[];
+  async findByTask(taskId: string): Promise<FixAttempt[]> {
+    const { rows } = await getPool().query(
+      'SELECT * FROM fix_attempts WHERE task_id = $1 ORDER BY attempt_number DESC', [taskId]
+    );
+    return rows as FixAttempt[];
   }
 
-  getLatestAttemptNumber(taskId: string): number {
-    const db = getDb();
-    const row = db.prepare('SELECT COALESCE(MAX(attempt_number), 0) as max_attempt FROM fix_attempts WHERE task_id = ?').get(taskId) as { max_attempt: number };
+  async getLatestAttemptNumber(taskId: string): Promise<number> {
+    const { rows: [row] } = await getPool().query(
+      'SELECT COALESCE(MAX(attempt_number), 0) as max_attempt FROM fix_attempts WHERE task_id = $1', [taskId]
+    );
     return row.max_attempt;
   }
 
-  create(data: {
+  async create(data: {
     task_id: string;
     attempt_number: number;
     trigger_run_id?: string;
     files_changed?: string;
     fix_description?: string;
     result_status: string;
-  }): FixAttempt {
-    const db = getDb();
+  }): Promise<FixAttempt> {
+    const pool = getPool();
     const id = uuid();
-    db.prepare(`
+    await pool.query(`
       INSERT INTO fix_attempts (id, task_id, attempt_number, trigger_run_id, files_changed, fix_description, result_status)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      data.task_id,
-      data.attempt_number,
-      data.trigger_run_id ?? null,
-      data.files_changed ?? null,
-      data.fix_description ?? null,
-      data.result_status,
-    );
-    return this.findById(id)!;
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      id, data.task_id, data.attempt_number,
+      data.trigger_run_id ?? null, data.files_changed ?? null,
+      data.fix_description ?? null, data.result_status,
+    ]);
+    return (await this.findById(id))!;
   }
 }

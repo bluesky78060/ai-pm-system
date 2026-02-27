@@ -2,7 +2,7 @@ import { TaskRepository } from '../db/repositories/task-repo.js';
 import { ActivityRepository } from '../db/repositories/activity-repo.js';
 import { EpicRepository } from '../db/repositories/epic-repo.js';
 import { ProjectRepository } from '../db/repositories/project-repo.js';
-import { getDb } from '../db/connection.js';
+import { getPool } from '../db/connection.js';
 import type { Task, ActivityLog } from '../types/index.js';
 
 const projectRepo = new ProjectRepository();
@@ -74,29 +74,26 @@ export class AnalysisService {
   // -------------------------------------------------------------------------
   // dailyReport
   // -------------------------------------------------------------------------
-  dailyReport(projectId: string): DailyReport {
-    const project = projectRepo.findById(projectId);
+  async dailyReport(projectId: string): Promise<DailyReport> {
+    const project = await projectRepo.findById(projectId);
     if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
 
     // Today's date string in UTC (YYYY-MM-DD)
     const todayStr = new Date().toISOString().slice(0, 10);
 
     // Collect all task IDs belonging to this project
-    const allTasks = taskRepo.findAll({ project_id: projectId });
+    const allTasks = await taskRepo.findAll({ project_id: projectId });
     const taskIdSet = new Set(allTasks.map((t) => t.id));
 
     // Query activity_log for today's events filtered to this project's tasks
-    const db = getDb();
-    const rows = db
-      .prepare(
-        `SELECT * FROM activity_log
-         WHERE date(created_at) = ?
-         ORDER BY created_at DESC`
-      )
-      .all(todayStr) as ActivityLog[];
+    const pool = getPool();
+    const { rows } = await pool.query(
+      'SELECT * FROM activity_log WHERE created_at::date = $1 ORDER BY created_at DESC',
+      [todayStr]
+    );
 
     // Deserialize payload and filter to project tasks (or project-level events with no task)
-    const todayEvents: ActivityLog[] = rows
+    const todayEvents: ActivityLog[] = (rows as ActivityLog[])
       .map((row) => ({
         ...row,
         payload: typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload,
@@ -135,11 +132,11 @@ export class AnalysisService {
   // -------------------------------------------------------------------------
   // bottleneck
   // -------------------------------------------------------------------------
-  bottleneck(projectId: string): BottleneckAnalysis {
-    const project = projectRepo.findById(projectId);
+  async bottleneck(projectId: string): Promise<BottleneckAnalysis> {
+    const project = await projectRepo.findById(projectId);
     if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
 
-    const allTasks = taskRepo.findAll({ project_id: projectId });
+    const allTasks = await taskRepo.findAll({ project_id: projectId });
     const now = new Date();
     const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
 
@@ -165,7 +162,7 @@ export class AnalysisService {
       .map((b) => b.task);
 
     // longestDependencyChain: find task whose dependency chain is longest (BFS, max depth 5)
-    const longestChain = this._findLongestDependencyChain(allTasks);
+    const longestChain = await this._findLongestDependencyChain(allTasks);
 
     return {
       project_id: projectId,
@@ -176,19 +173,19 @@ export class AnalysisService {
     };
   }
 
-  private _findLongestDependencyChain(allTasks: Task[]): Task[] {
+  private async _findLongestDependencyChain(allTasks: Task[]): Promise<Task[]> {
     const taskMap = new Map<string, Task>(allTasks.map((t) => [t.id, t]));
     const MAX_DEPTH = 5;
     let bestChain: Task[] = [];
 
     // For each task, do a DFS following depends_on links, collect the longest path
-    const buildChain = (taskId: string, visited: Set<string>, depth: number): Task[] => {
+    const buildChain = async (taskId: string, visited: Set<string>, depth: number): Promise<Task[]> => {
       if (depth >= MAX_DEPTH || visited.has(taskId)) return [];
       const task = taskMap.get(taskId);
       if (!task) return [];
 
       visited.add(taskId);
-      const deps = taskRepo.getDependencies(taskId);
+      const deps = await taskRepo.getDependencies(taskId);
       if (deps.length === 0) {
         visited.delete(taskId);
         return [task];
@@ -196,7 +193,7 @@ export class AnalysisService {
 
       let longest: Task[] = [];
       for (const dep of deps) {
-        const subChain = buildChain(dep.depends_on, visited, depth + 1);
+        const subChain = await buildChain(dep.depends_on, visited, depth + 1);
         if (subChain.length > longest.length) longest = subChain;
       }
 
@@ -205,7 +202,7 @@ export class AnalysisService {
     };
 
     for (const task of allTasks) {
-      const chain = buildChain(task.id, new Set<string>(), 0);
+      const chain = await buildChain(task.id, new Set<string>(), 0);
       if (chain.length > bestChain.length) bestChain = chain;
     }
 
@@ -215,11 +212,11 @@ export class AnalysisService {
   // -------------------------------------------------------------------------
   // velocity
   // -------------------------------------------------------------------------
-  velocity(projectId: string): VelocityReport {
-    const project = projectRepo.findById(projectId);
+  async velocity(projectId: string): Promise<VelocityReport> {
+    const project = await projectRepo.findById(projectId);
     if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
 
-    const allTasks = taskRepo.findAll({ project_id: projectId });
+    const allTasks = await taskRepo.findAll({ project_id: projectId });
 
     // Build last-7-days date array (UTC, YYYY-MM-DD)
     const now = new Date();
@@ -252,7 +249,7 @@ export class AnalysisService {
     const avgPerDay = Math.round((totalInPeriod / 7) * 100) / 100;
 
     // Epic-level progress
-    const epics = epicRepo.findByProject(projectId);
+    const epics = await epicRepo.findByProject(projectId);
     const epicProgress: EpicProgress[] = epics.map((epic) => {
       const epicTasks = allTasks.filter((t) => t.epic_id === epic.id);
       const completed = epicTasks.filter((t) => t.status === 'done').length;

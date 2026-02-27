@@ -13,16 +13,16 @@ import { WorkflowService } from './services/workflow-service.js';
 import { AnalysisService } from './services/analysis-service.js';
 import { AutomationService } from './services/automation-service.js';
 
-runMigrations();
+await runMigrations();
 
 // Seed: 배포판에서 DB가 비어있으면 기본 프로젝트 데이터 생성
-function seedIfEmpty() {
+async function seedIfEmpty() {
   const ps = new ProjectService();
-  const existing = ps.getAll();
+  const existing = await ps.getAll();
   if (existing.length > 0) return;
 
   console.log('[Seed] Empty DB detected, creating default project...');
-  const project = ps.create({
+  const project = await ps.create({
     name: 'AI PM System',
     description: 'MCP 기반 AI 자율 개발 프로젝트 관리 시스템',
     github_repo: 'leechanhee/ai-pm-system',
@@ -36,13 +36,13 @@ function seedIfEmpty() {
   ];
 
   for (const epic of epics) {
-    ps.createEpic({ project_id: project.id, ...epic });
+    await ps.createEpic({ project_id: project.id, ...epic });
   }
 
   console.log(`[Seed] Project "${project.name}" (${project.code}) created with ${epics.length} epics`);
 }
 
-seedIfEmpty();
+await seedIfEmpty();
 
 const projectService = new ProjectService();
 const taskService = new TaskService();
@@ -67,19 +67,6 @@ function getErrorStatus(msg: string): number {
   return 400;
 }
 
-// Helper: wrap sync handlers
-function wrapSync(fn: (req: express.Request) => unknown) {
-  return (req: express.Request, res: express.Response) => {
-    try {
-      const result = fn(req);
-      res.json(result);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      res.status(getErrorStatus(msg)).json({ error: msg });
-    }
-  };
-}
-
 // Helper: wrap async handlers
 function wrapAsync(fn: (req: express.Request) => Promise<unknown>) {
   return async (req: express.Request, res: express.Response) => {
@@ -94,31 +81,31 @@ function wrapAsync(fn: (req: express.Request) => Promise<unknown>) {
 }
 
 // === Project routes ===
-app.get('/api/projects', wrapSync(() => ({ projects: projectService.getAll() })));
+app.get('/api/projects', wrapAsync(async () => ({ projects: await projectService.getAll() })));
 
-app.post('/api/projects', wrapSync((req) => projectService.create(req.body)));
+app.post('/api/projects', wrapAsync(async (req) => projectService.create(req.body)));
 
-app.get('/api/projects/:id', wrapSync((req) => {
-  const project = projectService.getById(req.params.id as string);
+app.get('/api/projects/:id', wrapAsync(async (req) => {
+  const project = await projectService.getById(req.params.id as string);
   if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${req.params.id as string}`);
-  const epics = projectService.getEpics(project.id);
+  const epics = await projectService.getEpics(project.id);
   return { project, epics };
 }));
 
-app.get('/api/projects/:id/status', wrapSync((req) => contextService.getProjectStatus(req.params.id as string)));
+app.get('/api/projects/:id/status', wrapAsync(async (req) => contextService.getProjectStatus(req.params.id as string)));
 
-app.get('/api/projects/:id/context', wrapSync((req) => contextService.getSessionContext(req.params.id as string)));
+app.get('/api/projects/:id/context', wrapAsync(async (req) => contextService.getSessionContext(req.params.id as string)));
 
-app.get('/api/projects/:id/blocking', wrapSync((req) => contextService.getBlockingAnalysis(req.params.id as string)));
+app.get('/api/projects/:id/blocking', wrapAsync(async (req) => contextService.getBlockingAnalysis(req.params.id as string)));
 
 // === Epic routes ===
-app.post('/api/projects/:id/epics', wrapSync((req) =>
+app.post('/api/projects/:id/epics', wrapAsync(async (req) =>
   projectService.createEpic({ project_id: req.params.id as string, ...req.body })
 ));
 
 // === Task routes ===
-app.get('/api/tasks', wrapSync((req) => ({
-  tasks: taskService.getAll({
+app.get('/api/tasks', wrapAsync(async (req) => ({
+  tasks: await taskService.getAll({
     project_id: req.query.project_id as string | undefined,
     epic_id: req.query.epic_id as string | undefined,
     status: req.query.status as string | undefined,
@@ -126,46 +113,46 @@ app.get('/api/tasks', wrapSync((req) => ({
   }),
 })));
 
-app.post('/api/tasks', wrapSync((req) => taskService.create({ ...req.body, created_by: 'human' })));
+app.post('/api/tasks', wrapAsync(async (req) => taskService.create({ ...req.body, created_by: 'human' })));
 
-app.get('/api/tasks/:id', wrapSync((req) => {
-  const task = taskService.getById(req.params.id as string);
+app.get('/api/tasks/:id', wrapAsync(async (req) => {
+  const task = await taskService.getById(req.params.id as string);
   if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${req.params.id as string}`);
-  const subtasks = taskService.getSubtasks(task.id);
+  const subtasks = await taskService.getSubtasks(task.id);
   return { task, subtasks };
 }));
 
-app.patch('/api/tasks/:id/status', wrapSync((req) =>
+app.patch('/api/tasks/:id/status', wrapAsync(async (req) =>
   taskService.updateStatus(req.params.id as string, req.body.status, req.body.notes)
 ));
 
-app.patch('/api/tasks/:id/priority', wrapSync((req) =>
+app.patch('/api/tasks/:id/priority', wrapAsync(async (req) =>
   taskService.setPriority(req.params.id as string, req.body.priority, req.body.reason)
 ));
 
-app.post('/api/tasks/:id/decompose', wrapSync((req) =>
+app.post('/api/tasks/:id/decompose', wrapAsync(async (req) =>
   taskService.decompose(req.params.id as string, req.body.subtasks)
 ));
 
-app.post('/api/tasks/:id/dependencies', wrapSync((req) =>
+app.post('/api/tasks/:id/dependencies', wrapAsync(async (req) =>
   taskService.addDependency(req.params.id as string, req.body.depends_on_id)
 ));
 
 // === Test & Fix routes ===
-app.get('/api/tasks/:id/fix-history', wrapSync((req) =>
+app.get('/api/tasks/:id/fix-history', wrapAsync(async (req) =>
   testService.getFixHistory(req.params.id as string)
 ));
 
-app.post('/api/tasks/:id/test-runs', wrapSync((req) =>
+app.post('/api/tasks/:id/test-runs', wrapAsync(async (req) =>
   testService.runTests(req.params.id as string, req.body.results)
 ));
 
-app.post('/api/tasks/:id/test-result', wrapSync((req) =>
+app.post('/api/tasks/:id/test-result', wrapAsync(async (req) =>
   testService.reportTestResult(req.params.id as string, req.body.result, req.body.failures)
 ));
 
 // === GitHub routes ===
-app.post('/api/tasks/:id/link-pr', wrapSync((req) =>
+app.post('/api/tasks/:id/link-pr', wrapAsync(async (req) =>
   githubService.linkPrToTask(req.params.id as string, req.body.pr_url)
 ));
 
@@ -174,27 +161,27 @@ app.get('/api/tasks/:id/pr-status', wrapAsync((req) =>
 ));
 
 // === Activity routes ===
-app.get('/api/activities', wrapSync((req) => {
+app.get('/api/activities', wrapAsync(async (req) => {
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
   const filters: { actor?: string; task_id?: string } = {};
   if (req.query.task_id) filters.task_id = req.query.task_id as string;
   if (req.query.actor) filters.actor = req.query.actor as string;
-  return { activities: activityRepo.findRecent(limit, filters) };
+  return { activities: await activityRepo.findRecent(limit, filters) };
 }));
 
-app.get('/api/projects/:id/activities', wrapSync((req) => {
+app.get('/api/projects/:id/activities', wrapAsync(async (req) => {
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
   const projectId = req.params.id as string;
-  const tasks = taskService.getAll({ project_id: projectId });
+  const tasks = await taskService.getAll({ project_id: projectId });
   const taskIds = tasks.map(t => t.id);
   if (taskIds.length === 0) return { activities: [] };
-  const allActivities = taskIds.flatMap(tid => activityRepo.findByTask(tid, limit));
+  const allActivities = (await Promise.all(taskIds.map(tid => activityRepo.findByTask(tid, limit)))).flat();
   allActivities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   return { activities: allActivities.slice(0, limit) };
 }));
 
 // === Workflow routes ===
-app.post('/api/workflow/:taskId', wrapSync((req) => {
+app.post('/api/workflow/:taskId', wrapAsync(async (req) => {
   const { action, test_results, notes } = req.body;
   switch (action) {
     case 'start_work': return workflowService.startWork(req.params.taskId as string);
@@ -206,7 +193,7 @@ app.post('/api/workflow/:taskId', wrapSync((req) => {
 }));
 
 // === Analysis routes ===
-app.get('/api/projects/:id/analysis/:type', wrapSync((req) => {
+app.get('/api/projects/:id/analysis/:type', wrapAsync(async (req) => {
   const type = req.params.type as string;
   switch (type) {
     case 'daily_report': return analysisService.dailyReport(req.params.id as string);
@@ -217,11 +204,11 @@ app.get('/api/projects/:id/analysis/:type', wrapSync((req) => {
 }));
 
 // === Automation routes ===
-app.get('/api/projects/:id/automation', wrapSync((req) => ({
-  rules: automationService.listRules(req.params.id as string),
+app.get('/api/projects/:id/automation', wrapAsync(async (req) => ({
+  rules: await automationService.listRules(req.params.id as string),
 })));
 
-app.post('/api/projects/:id/automation', wrapSync((req) =>
+app.post('/api/projects/:id/automation', wrapAsync(async (req) =>
   automationService.createRule(
     req.params.id as string,
     req.body.name,
@@ -232,12 +219,12 @@ app.post('/api/projects/:id/automation', wrapSync((req) =>
   )
 ));
 
-app.delete('/api/automation/:ruleId', wrapSync((req) => {
-  automationService.deleteRule(req.params.ruleId as string);
+app.delete('/api/automation/:ruleId', wrapAsync(async (req) => {
+  await automationService.deleteRule(req.params.ruleId as string);
   return { message: '규칙 삭제 완료' };
 }));
 
-app.patch('/api/automation/:ruleId/toggle', wrapSync((req) =>
+app.patch('/api/automation/:ruleId/toggle', wrapAsync(async (req) =>
   automationService.toggleRule(req.params.ruleId as string)
 ));
 

@@ -1,31 +1,27 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import Database from 'better-sqlite3';
+import pg from 'pg';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Resolve project root: src/db/ -> src/ -> packages/mcp-server/ -> packages/ -> ai-pm-system/
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const { Pool } = pg;
 
-let db: Database.Database | null = null;
+let pool: pg.Pool | null = null;
 
-export function getDb(): Database.Database {
-  if (!db) {
-    const dbPath = process.env.DB_PATH || path.resolve(PROJECT_ROOT, 'data', 'pm.db');
-    const dir = path.dirname(dbPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+export function getPool(): pg.Pool {
+  if (!pool) {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL 환경변수가 설정되지 않았습니다.');
     }
-    db = new Database(dbPath);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
+    pool = new Pool({
+      connectionString,
+      ssl: connectionString.includes('render.com') ? { rejectUnauthorized: false } : undefined,
+      max: 10,
+    });
   }
-  return db;
+  return pool;
 }
 
-export function closeDb(): void {
-  if (db) {
-    db.close();
-    db = null;
+export async function closeDb(): Promise<void> {
+  if (pool) {
+    await pool.end();
+    pool = null;
   }
 }
