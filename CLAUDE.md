@@ -9,7 +9,7 @@
 모든 작업은 기존 **AI PM System** 프로젝트 내에서 진행합니다. 새 프로젝트를 만들지 않습니다.
 
 - **프로젝트 코드**: `APS`
-- **프로젝트 ID**: `a66eb02b-4256-4b24-9176-cc46a20d399b`
+- **프로젝트 ID**: `9fe805f8-15d6-4d67-804f-b14f57e13616`
 
 ### 작업 프로세스
 
@@ -55,7 +55,7 @@
 
 ## Tech Stack
 
-- **Backend**: Node.js, TypeScript, Express, SQLite (better-sqlite3)
+- **Backend**: Node.js, TypeScript, Express, PostgreSQL (pg)
 - **Frontend**: React 19, Vite 6, Tailwind CSS v4
 - **Monorepo**: pnpm workspaces (`@ai-pm/mcp-server`, `@ai-pm/web-ui`)
 - **MCP**: Model Context Protocol (stdio transport)
