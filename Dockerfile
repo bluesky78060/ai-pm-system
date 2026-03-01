@@ -17,12 +17,14 @@ RUN pnpm install --frozen-lockfile
 COPY packages/mcp-server/ packages/mcp-server/
 COPY packages/web-ui/ packages/web-ui/
 
-# Build
-RUN pnpm -r build
+# Build sequentially with memory limit for Render free tier (512MB)
+ENV NODE_OPTIONS="--max-old-space-size=384"
+RUN pnpm --filter @ai-pm/mcp-server build
+RUN pnpm --filter @ai-pm/web-ui build
 
 ENV PORT=3001
 ENV STATIC_PATH=/app/packages/web-ui/dist
 
 EXPOSE 3001
 
-CMD ["node", "packages/mcp-server/dist/api-server.js"]
+CMD ["node", "--max-old-space-size=384", "packages/mcp-server/dist/api-server.js"]
