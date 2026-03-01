@@ -192,7 +192,32 @@ export class TaskService {
 
   async update(idOrCode: string, data: Partial<Task>): Promise<Task> {
     const task = await resolveTask(idOrCode);
-    return taskRepo.update(task.id, data);
+    const updated = await taskRepo.update(task.id, data);
+
+    // Log meaningful field changes
+    const trackedFields = ['title', 'description', 'assignee', 'estimated_hrs', 'epic_id'];
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    const taskRecord = task as unknown as Record<string, unknown>;
+    const dataRecord = data as unknown as Record<string, unknown>;
+    for (const field of trackedFields) {
+      if (field in data && dataRecord[field] !== taskRecord[field]) {
+        changes[field] = {
+          from: taskRecord[field],
+          to: dataRecord[field],
+        };
+      }
+    }
+
+    if (Object.keys(changes).length > 0) {
+      await activityRepo.create({
+        task_id: task.id,
+        actor: 'human',
+        action: 'update',
+        payload: { changes },
+      });
+    }
+
+    return updated;
   }
 
   async getStatusCounts(projectId: string): Promise<Record<string, number>> {

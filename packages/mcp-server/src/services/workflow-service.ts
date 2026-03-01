@@ -48,6 +48,17 @@ export class WorkflowService {
     const subtasks = await this.taskService.getSubtasks(task.id);
     const dependencies = await this.taskRepo.getDependencies(task.id);
 
+    await this.activityRepo.create({
+      task_id: task.id,
+      actor: 'ai',
+      action: 'workflow_start',
+      payload: {
+        subtask_count: subtasks.length,
+        dependency_count: dependencies.length,
+        ticket_code: task.ticket_code,
+      },
+    });
+
     return {
       task,
       subtasks,
@@ -134,8 +145,22 @@ export class WorkflowService {
     await this.activityRepo.create({
       task_id: task.id,
       actor: 'ai',
-      action: 'workflow_test',
-      payload: { overall, run_number, results_count: results.length },
+      action: 'test_run',
+      payload: {
+        overall,
+        run_number,
+        results_count: results.length,
+        pass: results.filter(r => r.status === 'pass').length,
+        fail: results.filter(r => r.status === 'fail').length,
+        skip: results.filter(r => r.status === 'skip').length,
+        results: results.map(r => ({
+          name: r.test_type,
+          status: r.status,
+          duration_ms: r.duration_ms,
+          runner: r.test_type,
+        })),
+        next_status: task.status,
+      },
     });
 
     return {
@@ -229,6 +254,17 @@ export class WorkflowService {
         }
       }
     }
+
+    await this.activityRepo.create({
+      task_id: task.id,
+      actor: 'ai',
+      action: 'workflow_review_approved',
+      payload: {
+        notes,
+        epic_progress: epicProgress,
+        next_recommended: nextRecommended ? { id: nextRecommended.task.id, title: nextRecommended.task.title } : null,
+      },
+    });
 
     return {
       task,
