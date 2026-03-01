@@ -14,19 +14,19 @@ interface ColumnDef {
   key: string;
   statuses: StatusKey[];
   label: string;
-  dotColor: string;
+  color: string;       // hex color for dot + header tint
   group: string;
   groupStart: boolean;
   groupEnd: boolean;
 }
 
 const COLUMNS: ColumnDef[] = [
-  { key: 'todo',        statuses: ['todo'],               label: 'Todo',        dotColor: 'bg-indigo-500', group: 'BACKLOG',  groupStart: true,  groupEnd: true },
-  { key: 'in_progress', statuses: ['in_progress'],        label: 'In Progress', dotColor: 'bg-amber-500',  group: 'ACTIVE',   groupStart: true,  groupEnd: false },
-  { key: 'verifying',   statuses: ['testing', 'fixing'],  label: 'Verifying',   dotColor: 'bg-violet-500', group: 'ACTIVE',   groupStart: false, groupEnd: true },
-  { key: 'review',      statuses: ['review'],             label: 'Review',      dotColor: 'bg-cyan-500',   group: 'REVIEW',   groupStart: true,  groupEnd: true },
-  { key: 'done',        statuses: ['done'],               label: 'Done',        dotColor: 'bg-green-500',  group: 'COMPLETE', groupStart: true,  groupEnd: false },
-  { key: 'blocked',     statuses: ['blocked'],            label: 'Blocked',     dotColor: 'bg-red-500',    group: 'COMPLETE', groupStart: false, groupEnd: true },
+  { key: 'todo',        statuses: ['todo'],               label: 'Todo',        color: '#6366f1', group: 'BACKLOG',  groupStart: true,  groupEnd: true },
+  { key: 'in_progress', statuses: ['in_progress'],        label: 'In Progress', color: '#f59e0b', group: 'ACTIVE',   groupStart: true,  groupEnd: false },
+  { key: 'verifying',   statuses: ['testing', 'fixing'],  label: 'Verifying',   color: '#8b5cf6', group: 'ACTIVE',   groupStart: false, groupEnd: true },
+  { key: 'review',      statuses: ['review'],             label: 'Review',      color: '#06b6d4', group: 'REVIEW',   groupStart: true,  groupEnd: true },
+  { key: 'done',        statuses: ['done'],               label: 'Done',        color: '#22c55e', group: 'COMPLETE', groupStart: true,  groupEnd: false },
+  { key: 'blocked',     statuses: ['blocked'],            label: 'Blocked',     color: '#ef4444', group: 'COMPLETE', groupStart: false, groupEnd: true },
 ];
 
 export default function KanbanBoard({ tasks, epics }: KanbanBoardProps) {
@@ -73,14 +73,29 @@ export default function KanbanBoard({ tasks, epics }: KanbanBoardProps) {
             <div key={col.key} className="flex-1 min-w-[160px] flex">
               <div className="flex-1 flex flex-col min-w-0">
                 {/* Column header */}
-                <div className="flex items-center justify-between bg-[#161822] rounded-lg px-3.5 py-2.5 mb-3">
+                <div
+                  className="flex items-center justify-between rounded-lg px-3.5 py-2.5 mb-3 border"
+                  style={{
+                    background: `linear-gradient(135deg, ${col.color}18 0%, ${col.color}08 100%)`,
+                    borderColor: `${col.color}25`,
+                  }}
+                >
                   <div className="flex items-center gap-2">
-                    <span className={`w-2.5 h-2.5 rounded-full ${col.dotColor}`} />
+                    <span
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{ backgroundColor: col.color }}
+                    />
                     <span className="text-[13px] font-semibold text-slate-200">
                       {col.label}
                     </span>
                   </div>
-                  <span className="text-[11px] font-medium text-slate-400 bg-[#1E2030] px-2 py-0.5 rounded-full">
+                  <span
+                    className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                    style={{
+                      backgroundColor: `${col.color}20`,
+                      color: col.color,
+                    }}
+                  >
                     {colTasks.length}
                   </span>
                 </div>
