@@ -11,3 +11,5 @@ data/*.db-shm
 .bkit-memory.json
 .pdca-status.json
 .omc/
+.claude/active-ticket
+.claude/settings.local.json
