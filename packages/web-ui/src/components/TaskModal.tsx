@@ -37,8 +37,6 @@ interface StageGroup {
 /* ─────────────────────────────────────────────
    Constants
 ───────────────────────────────────────────── */
-const STATUS_ORDER = ['todo', 'in_progress', 'testing', 'fixing', 'review', 'done'];
-
 const STATUS_META: Record<string, { label: string; icon: string; color: string; bg: string; dotDone: string; dotFail: string }> = {
   todo:        { label: 'todo',        icon: '\uD83D\uDCCB', color: 'text-indigo-300',  bg: 'bg-indigo-500/20',  dotDone: 'border-green-500 text-green-500', dotFail: '' },
   in_progress: { label: 'in_progress', icon: '\u26A1',       color: 'text-amber-300',   bg: 'bg-amber-500/20',   dotDone: 'border-green-500 text-green-500', dotFail: '' },
@@ -53,8 +51,8 @@ const STATUS_META: Record<string, { label: string; icon: string; color: string; 
    Helpers
 ───────────────────────────────────────────── */
 function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}초`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}분`;
+  if (seconds < 60) return `${seconds}\uCD08`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}\uBD84`;
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
@@ -67,7 +65,7 @@ function formatTime(iso: string): string {
 function formatTimeRange(start: string, end: string): string {
   const s = formatTime(start);
   const e = formatTime(end);
-  return s === e ? s : `${s} – ${e}`;
+  return s === e ? s : `${s} \u2013 ${e}`;
 }
 
 /** Group activities by status transitions into stage cards */
@@ -192,7 +190,7 @@ function ActivityContent({ activity }: { activity: Activity }) {
       return (
         <div className="mt-3 bg-[rgba(108,143,255,0.05)] border border-[rgba(108,143,255,0.18)] border-l-[3px] border-l-[#6c8fff] rounded-lg px-3.5 py-2.5">
           <div className="text-[9px] font-bold uppercase tracking-wider text-[#6c8fff] mb-1.5 flex items-center gap-1.5">
-            <span>\uD83E\uDD16</span> AI \uBD84\uC11D
+            <span>{'\uD83E\uDD16'}</span> {'AI \uBD84\uC11D'}
           </div>
           <div className="text-xs text-[#9198b4] leading-relaxed whitespace-pre-wrap">{analysis}</div>
         </div>
@@ -215,7 +213,7 @@ function ActivityContent({ activity }: { activity: Activity }) {
       const ids = Array.isArray(payload.subtaskIds) ? payload.subtaskIds as string[] : null;
       return (
         <div className="mt-2">
-          {count != null && <span className="text-xs text-purple-300 font-mono">{count}\uAC1C \uC11C\uBE0C\uD0DC\uC2A4\uD06C\uB85C \uBD84\uD574</span>}
+          {count != null && <span className="text-xs text-purple-300 font-mono">{count}{'\uAC1C \uC11C\uBE0C\uD0DC\uC2A4\uD06C\uB85C \uBD84\uD574'}</span>}
           {ids && ids.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
               {ids.map((id, i) => (
@@ -240,11 +238,11 @@ function ActivityContent({ activity }: { activity: Activity }) {
         <div className="mt-2.5">
           {runNumber != null && (
             <div className="text-[10px] font-mono font-semibold text-[#555e7a] mb-1.5 flex items-center gap-1.5">
-              <span className="bg-[#252a3a] border border-[#3a4060] text-[#9198b4] px-1.5 py-0.5 rounded">{runNumber}\uCC28 \uC2E4\uD589</span>
+              <span className="bg-[#252a3a] border border-[#3a4060] text-[#9198b4] px-1.5 py-0.5 rounded">{runNumber}{'\uCC28 \uC2E4\uD589'}</span>
               {fail > 0 ? (
-                <span className="text-red-400">&middot; {fail}/{pass + fail + skip} \uC2E4\uD328</span>
+                <span className="text-red-400">{'\u00B7'} {fail}/{pass + fail + skip} {'\uC2E4\uD328'}</span>
               ) : (
-                <span className="text-green-400">&middot; \uC804\uCCB4 \uD1B5\uACFC</span>
+                <span className="text-green-400">{'\u00B7 \uC804\uCCB4 \uD1B5\uACFC'}</span>
               )}
             </div>
           )}
@@ -260,6 +258,7 @@ function ActivityContent({ activity }: { activity: Activity }) {
                       {isFail ? '\u2715' : '\u2713'}
                     </span>
                     <span className="text-[#9198b4] flex-1">{String(r.name ?? '')}</span>
+                    {r.runner ? <span className="font-mono text-[10px] text-[#555e7a]">{String(r.runner)}</span> : null}
                     {r.duration_ms != null && (
                       <span className="font-mono text-[10px] text-[#555e7a] min-w-[36px] text-right">{Number(r.duration_ms)}ms</span>
                     )}
@@ -269,9 +268,9 @@ function ActivityContent({ activity }: { activity: Activity }) {
             </div>
           ) : (pass > 0 || fail > 0) ? (
             <div className="flex gap-3 text-xs font-mono">
-              <span className="text-green-400">\u2713 {pass} pass</span>
-              {fail > 0 && <span className="text-red-400">\u2715 {fail} fail</span>}
-              {skip > 0 && <span className="text-[#555e7a]">\u2298 {skip} skip</span>}
+              <span className="text-green-400">{'\u2713'} {pass} pass</span>
+              {fail > 0 && <span className="text-red-400">{'\u2715'} {fail} fail</span>}
+              {skip > 0 && <span className="text-[#555e7a]">{'\u2298'} {skip} skip</span>}
             </div>
           ) : null}
         </div>
@@ -285,7 +284,7 @@ function ActivityContent({ activity }: { activity: Activity }) {
       return (
         <div className="mt-2.5 bg-[#0f1117] border border-red-500/18 border-l-2 border-l-red-500 rounded-md px-3 py-2 font-mono text-[11px] leading-relaxed">
           {errorType && <div className="text-red-400 font-semibold mb-0.5">{errorType}</div>}
-          {message && <div className="text-red-400">\u2715 {message}</div>}
+          {message && <div className="text-red-400">{'\u2715'} {message}</div>}
           {stack && <div className="text-[#555e7a] mt-1 whitespace-pre-wrap">{stack}</div>}
         </div>
       );
@@ -297,9 +296,9 @@ function ActivityContent({ activity }: { activity: Activity }) {
       const filesChanged = Array.isArray(payload.filesChanged) ? payload.filesChanged as string[] : null;
       return (
         <div className="mt-2.5 bg-[rgba(245,146,90,0.04)] border border-[rgba(245,146,90,0.2)] border-l-[3px] border-l-[#f5925a] rounded-lg px-3.5 py-2.5">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-[#f5925a] mb-1.5">\uD83E\uDD16 \uC218\uC815 \uC774\uC720</div>
-          {description && <div className="text-xs text-[#9198b4] leading-relaxed">{description}</div>}
-          {fixTaskId && <div className="mt-1 text-[10px] text-[#555e7a]">\uC218\uC815 \uD0DC\uC2A4\uD06C: <span className="font-mono text-orange-300">{fixTaskId}</span></div>}
+          <div className="text-[9px] font-bold uppercase tracking-wider text-[#f5925a] mb-1.5">{'\uD83E\uDD16 \uC218\uC815 \uC774\uC720'}</div>
+          {description && <div className="text-xs text-[#9198b4] leading-relaxed whitespace-pre-wrap">{description}</div>}
+          {fixTaskId && <div className="mt-1 text-[10px] text-[#555e7a]">{'\uC218\uC815 \uD0DC\uC2A4\uD06C:'} <span className="font-mono text-orange-300">{fixTaskId}</span></div>}
           {filesChanged && filesChanged.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
               {filesChanged.map((f, i) => (
@@ -315,7 +314,7 @@ function ActivityContent({ activity }: { activity: Activity }) {
       const notes = typeof payload.notes === 'string' ? payload.notes : null;
       return (
         <div className="mt-2.5 bg-[rgba(62,207,142,0.04)] border border-[rgba(62,207,142,0.2)] border-l-[3px] border-l-green-400 rounded-lg px-3.5 py-2.5">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-green-400 mb-1">\u2705 \uC218\uC815 \uC644\uB8CC</div>
+          <div className="text-[9px] font-bold uppercase tracking-wider text-green-400 mb-1">{'\u2705 \uC218\uC815 \uC644\uB8CC'}</div>
           {notes && <div className="text-xs text-[#9198b4]">{notes}</div>}
         </div>
       );
@@ -347,7 +346,7 @@ function ActivityContent({ activity }: { activity: Activity }) {
     }
 
     case 'commit_sync': {
-      const hash = typeof payload.commitHash === 'string' ? payload.commitHash : null;
+      const hash = typeof payload.commitHash === 'string' ? payload.commitHash : typeof payload.commit_hash === 'string' ? payload.commit_hash : null;
       const message = typeof payload.message === 'string' ? payload.message : typeof payload.notes === 'string' ? payload.notes : null;
       const additions = typeof payload.additions === 'number' ? payload.additions : null;
       const deletions = typeof payload.deletions === 'number' ? payload.deletions : null;
@@ -360,7 +359,7 @@ function ActivityContent({ activity }: { activity: Activity }) {
             <div className="text-green-400 mt-0.5">
               {additions != null && <span>+{additions}</span>}
               {deletions != null && <span className="text-red-400 ml-1">-{deletions}</span>}
-              {filesChanged && <span className="text-[#555e7a] ml-1">&middot; {filesChanged.length} files changed</span>}
+              {filesChanged && <span className="text-[#555e7a] ml-1">{'\u00B7'} {filesChanged.length} files changed</span>}
             </div>
           )}
         </div>
@@ -372,9 +371,9 @@ function ActivityContent({ activity }: { activity: Activity }) {
       const attempts = typeof payload.attempts === 'number' ? payload.attempts : null;
       return (
         <div className="mt-2.5 bg-[rgba(241,107,107,0.04)] border border-[rgba(241,107,107,0.2)] border-l-[3px] border-l-red-500 rounded-lg px-3.5 py-2.5">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-red-400 mb-1">\u26A0\uFE0F \uC5D0\uC2A4\uCEEC\uB808\uC774\uC158</div>
+          <div className="text-[9px] font-bold uppercase tracking-wider text-red-400 mb-1">{'\u26A0\uFE0F \uC5D0\uC2A4\uCEEC\uB808\uC774\uC158'}</div>
           {reason && <div className="text-xs text-red-200 leading-relaxed">{reason}</div>}
-          {attempts != null && <div className="mt-1 text-[10px] text-red-400">{attempts}\uD68C \uC2DC\uB3C4 \uD6C4</div>}
+          {attempts != null && <div className="mt-1 text-[10px] text-red-400">{attempts}{'\uD68C \uC2DC\uB3C4 \uD6C4'}</div>}
         </div>
       );
     }
@@ -410,7 +409,7 @@ function ActivityContent({ activity }: { activity: Activity }) {
       return (
         <div className="mt-2 text-xs font-mono text-[#9198b4]">
           <span className="text-[#555e7a]">{field}:</span>{' '}
-          {String(payload.from ?? '\u2014')} <span className="text-[#555e7a]">\u2192</span> {String(payload.to ?? '\u2014')}
+          {String(payload.from ?? '\u2014')} <span className="text-[#555e7a]">{'\u2192'}</span> {String(payload.to ?? '\u2014')}
         </div>
       );
     }
@@ -440,7 +439,6 @@ function StageCard({ stage, index, isOpen, onToggle }: {
   isOpen: boolean;
   onToggle: () => void;
 }) {
-  const meta = STATUS_META[stage.status] ?? STATUS_META.todo;
   const iconBgMap: Record<string, string> = {
     todo: 'bg-[rgba(136,145,176,0.1)]',
     in_progress: 'bg-[rgba(108,143,255,0.12)]',
@@ -473,12 +471,12 @@ function StageCard({ stage, index, isOpen, onToggle }: {
         <span className="text-[10px] font-mono text-[#555e7a] bg-[#252a3a] border border-[#2e3348] px-2 py-0.5 rounded-xl">
           {stage.status === 'done' ? '\uC644\uB8CC' : stage.durationSeconds > 0 ? formatDuration(stage.durationSeconds) : '\uC0DD\uC131'}
         </span>
-        {stage.testFailCount > 0 && <Pill variant="fail">{stage.testFailCount}\uD68C \uC2E4\uD328</Pill>}
-        {stage.fixCount > 0 && <Pill variant="fix">{stage.fixCount}\uD68C \uC218\uC815</Pill>}
+        {stage.testFailCount > 0 && <Pill variant="fail">{stage.testFailCount}{'\uD68C \uC2E4\uD328'}</Pill>}
+        {stage.fixCount > 0 && <Pill variant="fix">{stage.fixCount}{'\uD68C \uC218\uC815'}</Pill>}
         {stage.status === 'done' && <Pill variant="done">done</Pill>}
-        {stage.status === 'testing' && stage.testFailCount === 0 && stage.passed && <Pill variant="pass">\uC804\uCCB4 \uD1B5\uACFC</Pill>}
+        {stage.status === 'testing' && stage.testFailCount === 0 && stage.passed && <Pill variant="pass">{'\uC804\uCCB4 \uD1B5\uACFC'}</Pill>}
         <span className={`text-[#555e7a] text-[10px] ml-auto shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}>
-          \u25BE
+          {'\u25BE'}
         </span>
       </div>
 
@@ -497,7 +495,7 @@ function StageCard({ stage, index, isOpen, onToggle }: {
 
           {/* If no activities to show, show empty state */}
           {contentActivities.length === 0 && statusChanges.length === 0 && (
-            <div className="text-xs text-[#555e7a] mt-3 font-mono">\uAE30\uB85D\uB41C \uD65C\uB3D9 \uC5C6\uC74C</div>
+            <div className="text-xs text-[#555e7a] mt-3 font-mono">{'\uAE30\uB85D\uB41C \uD65C\uB3D9 \uC5C6\uC74C'}</div>
           )}
         </div>
       </div>
@@ -525,8 +523,8 @@ function StageFlowBar({ stages, onStageClick }: { stages: StageGroup[]; onStageC
               </div>
               <div className="text-[9px] font-mono text-[#555e7a] whitespace-nowrap text-center leading-tight">
                 {stage.label}
-                {hasFails && <><br /><span className="text-red-400">\u00D7{stage.testFailCount} \uC2E4\uD328</span></>}
-                {stage.fixCount > 0 && <><br /><span className="text-orange-400">\u00D7{stage.fixCount}</span></>}
+                {hasFails && <><br /><span className="text-red-400">{'\u00D7'}{stage.testFailCount} {'\uC2E4\uD328'}</span></>}
+                {stage.fixCount > 0 && <><br /><span className="text-orange-400">{'\u00D7'}{stage.fixCount}</span></>}
               </div>
             </div>
           </div>
@@ -601,7 +599,6 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
   // Compute stats
   const totalDuration = stages.reduce((sum, s) => sum + s.durationSeconds, 0);
   const totalFixes = stages.reduce((sum, s) => sum + s.fixCount, 0);
-  const totalTestFails = stages.reduce((sum, s) => sum + s.testFailCount, 0);
 
   const statusStyle = task ? STATUS_META[task.status] ?? STATUS_META.todo : STATUS_META.todo;
 
@@ -618,7 +615,7 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
             <div className="w-6 h-6 border-2 border-[#2e3348] border-t-[#6c8fff] rounded-full animate-spin" />
           </div>
         ) : !task ? (
-          <div className="text-center py-20 text-red-400">\uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC62C \uC218 \uC5C6\uC2B5\uB2C8\uB2E4</div>
+          <div className="text-center py-20 text-red-400">{'\uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC62C \uC218 \uC5C6\uC2B5\uB2C8\uB2E4'}</div>
         ) : (
           <>
             {/* ── HEADER ── */}
@@ -650,12 +647,12 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
 
             {/* ── META GRID ── */}
             <div className="grid grid-cols-3 gap-0 px-6 py-3.5 border-y border-[#2e3348] shrink-0">
-              <MetaItem label="Assignee" value={task.assignee} />
-              <MetaItem label="Created By" value={task.created_by} />
-              <MetaItem label="Priority" value={`P${task.priority}`} />
-              {task.completed_at && <MetaItem label="Completed" value={new Date(task.completed_at).toLocaleDateString('ko-KR')} className="mt-2.5" />}
-              {totalDuration > 0 && <MetaItem label="\uC18C\uC694 \uC2DC\uAC04" value={formatDuration(totalDuration)} className="mt-2.5" />}
-              {totalFixes > 0 && <MetaItem label="\uC218\uC815 \uD69F\uC218" value={`${totalFixes}\uD68C`} className="mt-2.5" highlight />}
+              <MetaItem label="ASSIGNEE" value={task.assignee} />
+              <MetaItem label="CREATED BY" value={task.created_by} />
+              <MetaItem label="PRIORITY" value={`P${task.priority}`} />
+              {task.completed_at && <MetaItem label="COMPLETED" value={new Date(task.completed_at).toLocaleDateString('ko-KR')} className="mt-2.5" />}
+              {totalDuration > 0 && <MetaItem label={'\uC18C\uC694 \uC2DC\uAC04'} value={formatDuration(totalDuration)} className="mt-2.5" />}
+              {totalFixes > 0 && <MetaItem label={'\uC218\uC815 \uD69F\uC218'} value={`${totalFixes}\uD68C`} className="mt-2.5" highlight />}
             </div>
 
             {/* ── STAGE FLOW BAR ── */}
@@ -707,9 +704,9 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
               {stages.length > 0 ? (
                 <>
                   <div className="text-[11px] font-semibold text-[#555e7a] uppercase tracking-wider mb-3 flex items-center gap-2">
-                    \uD65C\uB3D9 \uB0B4\uC5ED
+                    {'\uD65C\uB3D9 \uB0B4\uC5ED'}
                     <span className="text-[10px] font-mono bg-[#252a3a] border border-[#3a4060] text-[#9198b4] px-1.5 py-0.5 rounded-xl">
-                      {stages.length} \uB2E8\uACC4
+                      {stages.length} {'\uB2E8\uACC4'}
                     </span>
                   </div>
                   <div className="flex flex-col gap-2">
@@ -727,7 +724,7 @@ export default function TaskModal({ taskId, onClose }: TaskModalProps) {
                 </>
               ) : (
                 <div className="text-xs text-[#555e7a] bg-[#1A1D2E] rounded-lg px-4 py-6 text-center">
-                  \uC544\uC9C1 \uD65C\uB3D9 \uAE30\uB85D\uC774 \uC5C6\uC2B5\uB2C8\uB2E4
+                  {'\uC544\uC9C1 \uD65C\uB3D9 \uAE30\uB85D\uC774 \uC5C6\uC2B5\uB2C8\uB2E4'}
                 </div>
               )}
 
