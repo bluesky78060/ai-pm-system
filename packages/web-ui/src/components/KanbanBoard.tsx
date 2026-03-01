@@ -29,6 +29,13 @@ const COLUMNS: ColumnDef[] = [
   { key: 'blocked',     statuses: ['blocked'],            label: 'Blocked',     color: '#ef4444', group: 'COMPLETE', groupStart: false, groupEnd: true },
 ];
 
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export default function KanbanBoard({ tasks, epics }: KanbanBoardProps) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const epicMap = new Map(epics.map((e, i) => [e.id, { title: e.title, color: EPIC_COLOR_PALETTE[i % EPIC_COLOR_PALETTE.length] }]));
@@ -76,8 +83,8 @@ export default function KanbanBoard({ tasks, epics }: KanbanBoardProps) {
                 <div
                   className="flex items-center justify-between rounded-lg px-3.5 py-2.5 mb-3 border"
                   style={{
-                    background: `linear-gradient(135deg, ${col.color}18 0%, ${col.color}08 100%)`,
-                    borderColor: `${col.color}25`,
+                    background: `linear-gradient(135deg, ${hexToRgba(col.color, 0.15)} 0%, ${hexToRgba(col.color, 0.05)} 100%)`,
+                    borderColor: hexToRgba(col.color, 0.25),
                   }}
                 >
                   <div className="flex items-center gap-2">
@@ -92,7 +99,7 @@ export default function KanbanBoard({ tasks, epics }: KanbanBoardProps) {
                   <span
                     className="text-[11px] font-bold px-2 py-0.5 rounded-full"
                     style={{
-                      backgroundColor: `${col.color}20`,
+                      backgroundColor: hexToRgba(col.color, 0.2),
                       color: col.color,
                     }}
                   >
