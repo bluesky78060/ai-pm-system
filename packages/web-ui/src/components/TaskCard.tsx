@@ -51,14 +51,34 @@ export default function TaskCard({ task, epicTitle, epicColor, subtaskInfo, onCl
   const isDone = task.status === 'done';
   const isBlocked = task.status === 'blocked';
 
+  // 에픽 색상을 카드 배경 틴트로 사용 (더 은은하게)
+  const cardBg = epicColor
+    ? epicColor.bg.replace('0.15', '0.06')
+    : undefined;
+  const cardHoverBg = epicColor
+    ? epicColor.bg.replace('0.15', '0.12')
+    : undefined;
+
   return (
     <div
       onClick={() => onClick?.(task.id)}
-      className={`relative block rounded-lg border border-[#2e3348] bg-[#1A1D2E] overflow-hidden transition-all hover:bg-[#1E2135] hover:border-[#3d4463] cursor-pointer ${isDone ? 'opacity-65' : ''}`}
+      className={`relative block rounded-lg border overflow-hidden transition-all cursor-pointer ${isDone ? 'opacity-65' : ''}`}
+      style={{
+        backgroundColor: cardBg ?? '#1A1D2E',
+        borderColor: epicColor ? epicColor.dot + '20' : '#2e3348',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = cardHoverBg ?? '#1E2135';
+        e.currentTarget.style.borderColor = epicColor ? epicColor.dot + '40' : '#3d4463';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = cardBg ?? '#1A1D2E';
+        e.currentTarget.style.borderColor = epicColor ? epicColor.dot + '20' : '#2e3348';
+      }}
     >
       {/* 상태별 왼쪽 스트라이프 */}
       <div
-        className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-lg"
+        className="absolute left-0 top-0 bottom-0 w-[4px] rounded-l-lg"
         style={{ backgroundColor: stripeColor }}
       />
 
@@ -67,7 +87,13 @@ export default function TaskCard({ task, epicTitle, epicColor, subtaskInfo, onCl
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
             {task.ticket_code && (
-              <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-indigo-900/40 text-indigo-300">
+              <span
+                className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded"
+                style={epicColor
+                  ? { backgroundColor: epicColor.bg.replace('0.15', '0.25'), color: epicColor.text }
+                  : { backgroundColor: 'rgba(99,102,241,0.25)', color: '#818cf8' }
+                }
+              >
                 {task.ticket_code}
               </span>
             )}
