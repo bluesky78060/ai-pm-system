@@ -70,11 +70,24 @@ export class TaskService {
     }
     const { project_id: _pid, ...createData } = data;
     const task = await taskRepo.create(createData);
+
+    // 풍부한 생성 로그: 에픽 이름, 우선순위, 설명 포함
+    const epicInfo = task.epic_id ? await epicRepo.findById(task.epic_id) : null;
     await activityRepo.create({
       task_id: task.id,
       actor: data.created_by ?? 'human',
       action: 'create',
-      payload: { title: task.title, epicId: task.epic_id },
+      payload: {
+        title: task.title,
+        description: task.description || null,
+        ticket_code: task.ticket_code,
+        epic_id: task.epic_id,
+        epic_title: epicInfo?.title || null,
+        priority: task.priority,
+        assignee: task.assignee || null,
+        estimated_hrs: task.estimated_hrs || null,
+        created_by: data.created_by ?? 'human',
+      },
     });
     return { task, message: `태스크 '${task.title}' 생성됨` };
   }
@@ -127,15 +140,72 @@ export class TaskService {
     const previousStatus = task.status;
     const updated = await taskRepo.updateStatus(taskId, newStatus, notes);
 
-    const lastActivities = await activityRepo.findByTask(taskId, 1);
-    const lastTime = lastActivities.length > 0 ? new Date(lastActivities[0].created_at) : new Date(task.created_at);
+    // 소요 시간 계산
+    const allActivities = await activityRepo.findByTask(taskId, 100);
+    const lastTime = allActivities.length > 0 ? new Date(allActivities[0].created_at) : new Date(task.created_at);
     const durationSeconds = Math.floor((Date.now() - lastTime.getTime()) / 1000);
+    const createdTime = new Date(task.created_at);
+    const totalSeconds = Math.floor((Date.now() - createdTime.getTime()) / 1000);
+
+    // 상태 전환별 추가 컨텍스트 수집
+    const extra: Record<string, unknown> = {};
+
+    if (newStatus === 'in_progress') {
+      // 서브태스크 정보
+      const subtasks = await taskRepo.findByParent(taskId);
+      const deps = await taskRepo.getDependencies(taskId);
+      if (subtasks.length > 0) {
+        extra.subtask_count = subtasks.length;
+        extra.subtask_done = subtasks.filter(s => s.status === 'done').length;
+      }
+      if (deps.length > 0) extra.dependency_count = deps.length;
+    }
+
+    if (newStatus === 'done') {
+      // 에픽 진행률
+      if (task.epic_id) {
+        const epicTasks = await taskRepo.findByEpic(task.epic_id);
+        const epicTotal = epicTasks.length;
+        const epicDone = epicTasks.filter(t => t.status === 'done').length + 1; // +1 for current task
+        extra.epic_progress = { total: epicTotal, completed: Math.min(epicDone, epicTotal), rate: epicTotal > 0 ? Math.round((Math.min(epicDone, epicTotal) / epicTotal) * 100) : 0 };
+      }
+      extra.total_duration_seconds = totalSeconds;
+      // 이 태스크의 전체 상태 변경 히스토리
+      const statusChanges = allActivities.filter(a => a.action === 'status_change').reverse();
+      extra.status_history = statusChanges.map(a => {
+        const p = (typeof a.payload === 'object' && a.payload !== null) ? a.payload as Record<string, unknown> : {};
+        return { from: p.from, to: p.to, at: a.created_at };
+      });
+    }
+
+    if (newStatus === 'testing' || newStatus === 'review') {
+      // 이전 테스트/수정 시도 횟수
+      const testRuns = allActivities.filter(a => a.action === 'test_run' || a.action === 'workflow_test');
+      const fixAttempts = allActivities.filter(a => {
+        if (a.action !== 'status_change') return false;
+        const p = (typeof a.payload === 'object' && a.payload !== null) ? a.payload : {};
+        return (p as Record<string, unknown>).to === 'fixing';
+      });
+      if (testRuns.length > 0) extra.test_run_count = testRuns.length;
+      if (fixAttempts.length > 0) extra.fix_attempt_count = fixAttempts.length;
+    }
+
+    if (newStatus === 'blocked') {
+      extra.blocked_from = previousStatus;
+    }
 
     await activityRepo.create({
       task_id: taskId,
       actor: 'ai',
       action: 'status_change',
-      payload: { from: previousStatus, to: newStatus, notes, duration_seconds: durationSeconds },
+      payload: {
+        from: previousStatus,
+        to: newStatus,
+        notes,
+        duration_seconds: durationSeconds,
+        ticket_code: task.ticket_code,
+        ...extra,
+      },
     });
 
     return {
