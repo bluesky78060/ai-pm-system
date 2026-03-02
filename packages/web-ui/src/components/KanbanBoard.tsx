@@ -25,8 +25,7 @@ const COLUMNS: ColumnDef[] = [
   { key: 'in_progress', statuses: ['in_progress'],        label: 'In Progress', color: '#f59e0b', group: 'ACTIVE',   groupStart: true,  groupEnd: false },
   { key: 'verifying',   statuses: ['testing', 'fixing'],  label: 'Verifying',   color: '#8b5cf6', group: 'ACTIVE',   groupStart: false, groupEnd: true },
   { key: 'review',      statuses: ['review'],             label: 'Review',      color: '#06b6d4', group: 'REVIEW',   groupStart: true,  groupEnd: true },
-  { key: 'done',        statuses: ['done'],               label: 'Done',        color: '#22c55e', group: 'COMPLETE', groupStart: true,  groupEnd: false },
-  { key: 'blocked',     statuses: ['blocked'],            label: 'Blocked',     color: '#ef4444', group: 'COMPLETE', groupStart: false, groupEnd: true },
+  { key: 'done',        statuses: ['done', 'blocked'],    label: 'Done',        color: '#22c55e', group: 'COMPLETE', groupStart: true,  groupEnd: true },
 ];
 
 function hexToRgba(hex: string, alpha: number): string {
