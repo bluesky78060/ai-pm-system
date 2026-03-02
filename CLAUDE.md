@@ -11,17 +11,29 @@
 - **프로젝트 코드**: `APS`
 - **프로젝트 ID**: `9fe805f8-15d6-4d67-804f-b14f57e13616`
 
-### 작업 프로세스
+### 작업 프로세스 (에이전트 오케스트레이션)
 
-1. **에픽 확인/생성**: `get_project_status`로 기존 에픽 목록을 확인. 새로운 기능 영역이면 `create_epic`으로 APS 프로젝트에 에픽 추가. 기존 에픽에 해당하면 해당 에픽 사용.
-2. **티켓(태스크) 발행**: `create_task` 도구로 티켓 생성. 반드시 `epic_id`를 지정하여 티켓코드(예: `APS-1-3`)가 자동 생성되도록 한다.
-3. **상태 전환**: 작업 시작 시 `update_task_status`로 `in_progress`로 전환. 이후 상태 머신에 따라 전환:
-   - `todo` → `in_progress` → `testing` → `review` → `done`
-   - 문제 발생 시: `testing` → `fixing` → `testing` (반복)
-   - 블로커: 어디서든 `blocked` 전환 가능
-4. **Verifying 단계**: `testing` 상태에서 실제로 빌드/테스트를 실행하고 결과를 확인한다. 형식적으로 통과시키지 않는다.
-5. **Review 단계**: `review` 상태에서 코드 리뷰를 수행한다. 이슈가 발견되면 `in_progress`로 되돌려 수정한다.
-6. **완료 보고**: `done` 전환 시 `notes`에 완료 내역을 기록한다.
+각 상태에서 **실제 에이전트가 해당 작업을 수행**해야 한다. 형식적 전환은 서버에서 차단된다.
+
+1. **에픽 확인/생성**: `get_project_status`로 기존 에픽 목록을 확인. 새로운 기능 영역이면 `create_epic`으로 에픽 추가.
+2. **티켓 발행**: `create_task`로 티켓 생성. 반드시 `epic_id` 지정.
+3. **작업 시작**: `smart_workflow(task_id, 'start_work')` 호출 → `in_progress` 전환.
+4. **코드 작성 (in_progress)**: **executor 에이전트**에 위임하여 실제 코드 작성.
+   - 복잡한 작업: `executor-high` (Opus)
+   - 표준 작업: `executor` (Sonnet)
+   - 단순 변경: `executor-low` (Haiku)
+   - 여러 파일 변경 시 병렬 에이전트 활용 가능
+5. **검증 (testing)**: 코드 작성 완료 후 **실제 빌드/테스트 실행**:
+   - `pnpm -r build` 실행하여 빌드 결과 수집
+   - `pnpm test` 실행하여 테스트 결과 수집 (있는 경우)
+   - `smart_workflow(task_id, 'submit_test', test_results=[...])` 호출
+   - **test_results에 반드시 build 타입 포함 + 실제 출력(output) 10자 이상 필수**
+   - 통과 → 자동으로 `review` 전환 / 실패 → `fixing` 전환
+6. **코드 리뷰 (review)**: **code-reviewer 에이전트**에 위임하여 실제 코드 리뷰 수행.
+   - 리뷰 결과(발견사항, 승인/거부)를 받아서
+   - `smart_workflow(task_id, 'approve_review', notes='리뷰 결과 상세')` 호출
+   - **notes 20자 이상 필수 (실제 리뷰 결과)**
+7. **완료**: 리뷰 승인 시 자동으로 `done` 전환. 에픽 진행률 + 다음 추천 태스크 반환.
 
 ### 티켓코드 형식
 
@@ -41,15 +53,26 @@
 | `create_project` | 프로젝트 생성 |
 | `create_epic` | 에픽 생성 |
 | `create_task` | 티켓 발행 |
-| `update_task_status` | 상태 전환 (반드시 상태 머신 준수) |
+| `smart_workflow` | **워크플로우 전환 (필수 사용)** — start_work, submit_test, complete_fix, approve_review |
+| `update_task_status` | 단순 상태 전환 (testing→review, review→done은 차단됨) |
 | `get_project_status` | 프로젝트 진행률 조회 |
 | `get_session_context` | 현재 작업 컨텍스트 조회 |
 | `get_blocking_analysis` | 블로킹 분석 |
 
+### 상태별 에이전트 매핑 (필수)
+
+| 상태 | 실제 수행 | 에이전트 |
+|------|----------|---------|
+| `in_progress` | 코드 작성 | executor / executor-high |
+| `testing` | 빌드 + 테스트 실행 | build-fixer (실패 시) |
+| `review` | 코드 리뷰 | code-reviewer |
+
 ### 금지 사항
 
 - 티켓 없이 코드 변경 작업을 시작하지 않는다.
-- `testing` → `review` → `done` 을 실제 검증 없이 형식적으로 통과시키지 않는다.
+- `update_task_status`로 `testing→review`, `review→done` 직접 전환 금지 (서버에서 차단됨).
+- 빌드/테스트를 **실제 실행하지 않고** `submit_test` 호출 금지.
+- 코드 리뷰를 **실제 수행하지 않고** `approve_review` 호출 금지.
 - 상태 머신을 우회하지 않는다 (예: `todo`에서 바로 `done`으로 전환 불가).
 - **새 프로젝트를 생성하지 않는다.** 모든 작업은 기존 APS 프로젝트 내에서 에픽/태스크로 관리한다.
 

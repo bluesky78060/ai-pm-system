@@ -428,27 +428,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     // Subagent tools
     {
       name: 'smart_workflow',
-      description: 'Execute compound workflow actions in a single call. Combines status transitions, test recording, and context retrieval.',
+      description: 'Execute compound workflow actions. testing→review and review→done transitions are ONLY allowed through this tool. submit_test requires REAL build/test output (pnpm -r build). approve_review requires REAL code review findings (20+ chars).',
       inputSchema: {
         type: 'object' as const,
         properties: {
           task_id: { type: 'string', description: 'Task ID or ticket code' },
-          action: { type: 'string', enum: ['start_work', 'submit_test', 'complete_fix', 'approve_review'], description: 'Workflow action' },
+          action: { type: 'string', enum: ['start_work', 'submit_test', 'complete_fix', 'approve_review'], description: 'start_work: todo→in_progress. submit_test: requires real build/test results with output. complete_fix: fixing→testing. approve_review: requires real code review notes.' },
           test_results: {
-            type: 'array', description: 'Test results (required for submit_test)',
+            type: 'array', description: 'REQUIRED for submit_test. Must include build result with real output (10+ chars). Run pnpm -r build and include the output.',
             items: {
               type: 'object',
               properties: {
-                test_type: { type: 'string', enum: ['unit', 'type', 'lint', 'integration', 'build'] },
+                test_type: { type: 'string', enum: ['unit', 'type', 'lint', 'integration', 'build'], description: 'build is REQUIRED. Others optional.' },
                 status: { type: 'string', enum: ['pass', 'fail', 'skip'] },
-                output: { type: 'string' },
+                output: { type: 'string', description: 'REQUIRED: actual command output (10+ chars). Paste real build/test output here.' },
                 failures: { type: 'string' },
                 duration_ms: { type: 'number' },
               },
-              required: ['test_type', 'status'],
+              required: ['test_type', 'status', 'output'],
             },
           },
-          notes: { type: 'string', description: 'Optional notes' },
+          notes: { type: 'string', description: 'REQUIRED for approve_review (20+ chars). Include actual code review findings from code-reviewer agent.' },
         },
         required: ['task_id', 'action'],
       },

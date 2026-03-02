@@ -82,6 +82,19 @@ export class WorkflowService {
     run_number: number;
     next_status: string;
   }> {
+    // 실제 테스트 결과 증거 검증
+    if (!results || results.length === 0) {
+      throw new Error('테스트 결과가 비어있습니다. 실제 빌드/테스트를 실행한 후 결과를 제출하세요.');
+    }
+    const hasBuild = results.some(r => r.test_type === 'build');
+    if (!hasBuild) {
+      throw new Error('빌드(build) 결과가 필수입니다. pnpm -r build를 실행하고 결과를 포함하세요.');
+    }
+    const missingOutput = results.find(r => !r.output || r.output.trim().length < 10);
+    if (missingOutput) {
+      throw new Error(`테스트 '${missingOutput.test_type}'의 output이 부족합니다. 실제 실행 출력을 10자 이상 포함하세요.`);
+    }
+
     const found = await this.taskService.getById(taskId);
     if (!found) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
@@ -116,7 +129,7 @@ export class WorkflowService {
 
     if (overall === 'pass') {
       try {
-        const result = await this.taskService.updateStatus(task.id, 'review', '테스트 통과 → 리뷰 (smart_workflow)');
+        const result = await this.taskService.updateStatus(task.id, 'review', '테스트 통과 → 리뷰 (smart_workflow)', { bypassGuard: true });
         task = result.task;
       } catch (e) {
         throw new Error(`review 상태 전환 실패 (${task.ticket_code ?? task.id}): ${(e as Error).message}`);
@@ -221,12 +234,17 @@ export class WorkflowService {
     nextRecommended: { task: Task; reason: string } | null;
     message: string;
   }> {
+    // 코드 리뷰 결과 증거 검증
+    if (!notes || notes.trim().length < 20) {
+      throw new Error('코드 리뷰 결과(notes)를 20자 이상 작성해야 합니다. code-reviewer 에이전트의 리뷰 결과를 포함하세요.');
+    }
+
     const found = await this.taskService.getById(taskId);
     if (!found) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
 
     let task: Task;
     try {
-      const result = await this.taskService.updateStatus(found.id, 'done', notes ?? '리뷰 승인 → 완료 (smart_workflow)');
+      const result = await this.taskService.updateStatus(found.id, 'done', notes ?? '리뷰 승인 → 완료 (smart_workflow)', { bypassGuard: true });
       task = result.task;
     } catch (e) {
       throw new Error(`done 상태 전환 실패 (${found.ticket_code ?? found.id}): ${(e as Error).message}`);

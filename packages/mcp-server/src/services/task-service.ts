@@ -128,7 +128,7 @@ export class TaskService {
     };
   }
 
-  async updateStatus(taskIdOrCode: string, newStatus: string, notes?: string): Promise<{ task: Task; previousStatus: string; message: string }> {
+  async updateStatus(taskIdOrCode: string, newStatus: string, notes?: string, options?: { bypassGuard?: boolean }): Promise<{ task: Task; previousStatus: string; message: string }> {
     const task = await resolveTask(taskIdOrCode);
     const taskId = task.id;
 
@@ -137,30 +137,21 @@ export class TaskService {
       throw new Error(`잘못된 상태 전환: ${task.status} → ${newStatus}. 가능한 전환: ${allowed?.join(', ') ?? 'none'}`);
     }
 
-    // 증거(notes) 필수 전환: testing→review, review→done
-    const EVIDENCE_REQUIRED: Record<string, string[]> = {
-      testing: ['review'],
-      review: ['done'],
-    };
-    const needsEvidence = EVIDENCE_REQUIRED[task.status]?.includes(newStatus);
-    if (needsEvidence && (!notes || notes.trim().length < 5)) {
-      throw new Error(`${task.status} → ${newStatus} 전환 시 검증 결과(notes)를 5자 이상 작성해야 합니다. 형식적 전환은 금지됩니다.`);
-    }
+    // smart_workflow를 통한 호출은 가드 우회 (실제 검증이 포함되어 있으므로)
+    const bypass = options?.bypassGuard === true;
 
-    // 최소 체류 시간 검증 (testing, review 상태에서 30초 이상 경과 필요)
-    const MIN_DURATION_STATES = ['testing', 'review'];
-    if (MIN_DURATION_STATES.includes(task.status)) {
-      const activities = await activityRepo.findByTask(taskId, 50);
-      const enteredAt = activities.find(a => {
-        if (a.action !== 'status_change') return false;
-        const p = (typeof a.payload === 'object' && a.payload !== null) ? a.payload as Record<string, unknown> : {};
-        return p.to === task.status;
-      });
-      if (enteredAt) {
-        const elapsed = Math.floor((Date.now() - new Date(enteredAt.created_at).getTime()) / 1000);
-        if (elapsed < 30) {
-          throw new Error(`${task.status} 상태에서 최소 30초 이상 경과해야 전환할 수 있습니다. (현재 ${elapsed}초 경과)`);
-        }
+    if (!bypass) {
+      // 워크플로우 전용 전환: testing→review, review→done은 직접 호출 금지
+      const WORKFLOW_ONLY: Record<string, string[]> = {
+        testing: ['review'],
+        review: ['done'],
+      };
+      const isWorkflowOnly = WORKFLOW_ONLY[task.status]?.includes(newStatus);
+      if (isWorkflowOnly) {
+        throw new Error(
+          `${task.status} → ${newStatus} 전환은 smart_workflow를 통해서만 가능합니다. ` +
+          `testing→review: submit_test(빌드/테스트 결과 제출), review→done: approve_review(코드 리뷰 결과 제출)를 사용하세요.`
+        );
       }
     }
 
