@@ -172,14 +172,80 @@ function ActivityContent({ activity }: { activity: Activity }) {
   switch (action) {
     case 'status_change': {
       const notes = typeof payload.notes === 'string' ? payload.notes : null;
+      const durationSec = typeof payload.duration_seconds === 'number' ? payload.duration_seconds : null;
+      const ticketCode = typeof payload.ticket_code === 'string' ? payload.ticket_code : null;
+      const subtaskCount = typeof payload.subtask_count === 'number' ? payload.subtask_count : null;
+      const subtaskDone = typeof payload.subtask_done === 'number' ? payload.subtask_done : null;
+      const depCount = typeof payload.dependency_count === 'number' ? payload.dependency_count : null;
+      const epicProgress = typeof payload.epic_progress === 'object' && payload.epic_progress ? payload.epic_progress as Record<string, unknown> : null;
+      const totalDurSec = typeof payload.total_duration_seconds === 'number' ? payload.total_duration_seconds : null;
+      const statusHistory = Array.isArray(payload.status_history) ? payload.status_history as Record<string, unknown>[] : null;
+      const testRunCount = typeof payload.test_run_count === 'number' ? payload.test_run_count : null;
+      const fixAttemptCount = typeof payload.fix_attempt_count === 'number' ? payload.fix_attempt_count : null;
+      const blockedFrom = typeof payload.blocked_from === 'string' ? payload.blocked_from : null;
       return (
         <div className="mt-2.5">
           <div className="inline-flex items-center gap-2 bg-[#1A1D2E] border border-[#2e3348] rounded-md px-3 py-1.5 font-mono text-xs">
             <span className="text-[#555e7a]">{String(payload.from ?? '')}</span>
             <span className="text-[#555e7a]">{'\u2014\u25B6'}</span>
             <StatusBadge status={payload.to} />
+            {durationSec != null && durationSec > 0 && (
+              <span className="text-[10px] text-[#555e7a] ml-1">{'\u00B7'} {formatDuration(durationSec)}</span>
+            )}
           </div>
           {notes && <p className="text-[11px] font-mono text-[#555e7a] mt-1.5">{notes}</p>}
+          {/* Additional context info */}
+          {(ticketCode || subtaskCount != null || depCount != null || testRunCount != null || fixAttemptCount != null || blockedFrom) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[10px] font-mono text-[#555e7a]">
+              {ticketCode && <span className="bg-[#252a3a] border border-[#2e3348] px-1.5 py-0.5 rounded text-[#9198b4]">{ticketCode}</span>}
+              {subtaskCount != null && (
+                <span>{'\uC11C\uBE0C\uD0DC\uC2A4\uD06C'} {subtaskDone != null ? `${subtaskDone}/` : ''}{subtaskCount}</span>
+              )}
+              {depCount != null && <span>{'\uC758\uC874\uC131'} {depCount}</span>}
+              {testRunCount != null && <span>{'\uD14C\uC2A4\uD2B8'} {testRunCount}{'\uD68C'}</span>}
+              {fixAttemptCount != null && <span>{'\uC218\uC815'} {fixAttemptCount}{'\uD68C'}</span>}
+              {blockedFrom && <span>{'\uC774\uC804 \uC0C1\uD0DC'}: {blockedFrom}</span>}
+            </div>
+          )}
+          {/* Epic progress bar (on done transition) */}
+          {epicProgress && (
+            <div className="mt-2 flex items-center gap-2 text-[10px] font-mono">
+              <span className="text-[#555e7a] shrink-0">{'\uC5D0\uD53D'}</span>
+              <div className="flex-1 h-1.5 bg-[#252a3a] rounded-full overflow-hidden max-w-[120px]">
+                <div
+                  className="h-full bg-green-500/60 rounded-full transition-all"
+                  style={{ width: `${Number(epicProgress.rate ?? 0)}%` }}
+                />
+              </div>
+              <span className="text-[#9198b4]">{String(epicProgress.completed ?? 0)}/{String(epicProgress.total ?? 0)}</span>
+              <span className="text-green-400">{String(epicProgress.rate ?? 0)}%</span>
+            </div>
+          )}
+          {/* Total duration on done */}
+          {totalDurSec != null && (
+            <div className="mt-1 text-[10px] font-mono text-[#555e7a]">
+              {'\uCD1D \uC18C\uC694\uC2DC\uAC04'}: <span className="text-[#9198b4]">{formatDuration(totalDurSec)}</span>
+            </div>
+          )}
+          {/* Status history flow dots (on done transition) */}
+          {statusHistory && statusHistory.length > 0 && (
+            <div className="mt-2 flex items-center gap-1 flex-wrap">
+              {statusHistory.map((sh, i) => {
+                const toStr = typeof sh.to === 'string' ? sh.to : '';
+                const meta = STATUS_META[toStr];
+                return (
+                  <div key={i} className="flex items-center gap-1">
+                    {i > 0 && <div className="w-3 h-px bg-[#3a4060]" />}
+                    <div
+                      className={`w-2 h-2 rounded-full shrink-0 ${meta?.color ?? 'text-[#555e7a]'}`}
+                      style={{ backgroundColor: 'currentColor', opacity: 0.6 }}
+                      title={`${String(sh.from ?? '')} \u2192 ${toStr}`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       );
     }
@@ -200,10 +266,34 @@ function ActivityContent({ activity }: { activity: Activity }) {
     case 'create': {
       const type = typeof payload.type === 'string' ? payload.type : null;
       const name = typeof payload.title === 'string' ? payload.title : typeof payload.name === 'string' ? payload.name : null;
+      const ticketCode = typeof payload.ticket_code === 'string' ? payload.ticket_code : null;
+      const epicTitle = typeof payload.epic_title === 'string' ? payload.epic_title : null;
+      const priority = typeof payload.priority === 'number' ? payload.priority : null;
+      const assignee = typeof payload.assignee === 'string' ? payload.assignee : null;
+      const description = typeof payload.description === 'string' ? payload.description : null;
+      const estimatedHrs = typeof payload.estimated_hrs === 'number' ? payload.estimated_hrs : null;
+      const createdBy = typeof payload.created_by === 'string' ? payload.created_by : null;
       return (
-        <div className="mt-2 text-xs text-[#9198b4]">
-          {type && <span className="text-green-400 font-mono mr-1">{type}</span>}
-          {name && <span>{name}</span>}
+        <div className="mt-2">
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            {type && <span className="text-green-400 font-mono">{type}</span>}
+            {ticketCode && (
+              <span className="font-mono text-[10px] font-semibold bg-[#252a3a] border border-[#3a4060] text-[#9198b4] px-1.5 py-0.5 rounded">{ticketCode}</span>
+            )}
+            {name && <span className="text-[#9198b4]">{name}</span>}
+          </div>
+          {(epicTitle || priority != null || assignee || estimatedHrs != null || createdBy) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[10px] font-mono text-[#555e7a]">
+              {epicTitle && <span>{'\uC5D0\uD53D'}: <span className="text-[#9198b4]">{epicTitle}</span></span>}
+              {priority != null && <span>P{priority}</span>}
+              {assignee && <span>{assignee}</span>}
+              {estimatedHrs != null && <span>{estimatedHrs}h</span>}
+              {createdBy && <span>{createdBy}</span>}
+            </div>
+          )}
+          {description && (
+            <p className="text-[10px] text-[#555e7a] mt-1 line-clamp-2 leading-relaxed">{description}</p>
+          )}
         </div>
       );
     }
@@ -323,9 +413,17 @@ function ActivityContent({ activity }: { activity: Activity }) {
 
     case 'workflow_fix_complete': {
       const notes = typeof payload.notes === 'string' ? payload.notes : null;
+      const attemptNumber = typeof payload.attempt_number === 'number' ? payload.attempt_number : null;
       return (
         <div className="mt-2.5 bg-[rgba(62,207,142,0.04)] border border-[rgba(62,207,142,0.2)] border-l-[3px] border-l-green-400 rounded-lg px-3.5 py-2.5">
-          <div className="text-[9px] font-bold uppercase tracking-wider text-green-400 mb-1">{'\u2705 \uC218\uC815 \uC644\uB8CC'}</div>
+          <div className="text-[9px] font-bold uppercase tracking-wider text-green-400 mb-1 flex items-center gap-2">
+            <span>{'\u2705 \uC218\uC815 \uC644\uB8CC'}</span>
+            {attemptNumber != null && (
+              <span className="text-[10px] font-mono font-semibold bg-green-500/10 border border-green-500/20 text-green-400 px-1.5 py-0.5 rounded normal-case tracking-normal">
+                {'\uC218\uC815 \uC2DC\uB3C4'} #{attemptNumber}
+              </span>
+            )}
+          </div>
           {notes && <div className="text-xs text-[#9198b4]">{notes}</div>}
         </div>
       );
@@ -416,11 +514,32 @@ function ActivityContent({ activity }: { activity: Activity }) {
 
     case 'update': {
       const field = typeof payload.field === 'string' ? payload.field : null;
-      if (!field) return null;
+      const changes = typeof payload.changes === 'object' && payload.changes && !Array.isArray(payload.changes)
+        ? payload.changes as Record<string, Record<string, unknown>>
+        : null;
+
+      if (!field && !changes) return null;
+
       return (
-        <div className="mt-2 text-xs font-mono text-[#9198b4]">
-          <span className="text-[#555e7a]">{field}:</span>{' '}
-          {String(payload.from ?? '\u2014')} <span className="text-[#555e7a]">{'\u2192'}</span> {String(payload.to ?? '\u2014')}
+        <div className="mt-2 space-y-1">
+          {/* Single field change (legacy format) */}
+          {field && (
+            <div className="text-xs font-mono text-[#9198b4]">
+              <span className="text-[#555e7a]">{field}:</span>{' '}
+              {String(payload.from ?? '\u2014')} <span className="text-[#555e7a]">{'\u2192'}</span> {String(payload.to ?? '\u2014')}
+            </div>
+          )}
+          {/* Multi-field changes object */}
+          {changes && Object.entries(changes).map(([key, val]) => {
+            const fromVal = val && typeof val === 'object' ? val.from : undefined;
+            const toVal = val && typeof val === 'object' ? val.to : undefined;
+            return (
+              <div key={key} className="text-xs font-mono text-[#9198b4]">
+                <span className="text-[#555e7a]">{key}:</span>{' '}
+                {String(fromVal ?? '\u2014')} <span className="text-[#555e7a]">{'\u2192'}</span> {String(toVal ?? '\u2014')}
+              </div>
+            );
+          })}
         </div>
       );
     }
@@ -453,10 +572,55 @@ function ActivityContent({ activity }: { activity: Activity }) {
     case 'workflow_start': {
       const subtaskCount = typeof payload.subtask_count === 'number' ? payload.subtask_count : null;
       const depCount = typeof payload.dependency_count === 'number' ? payload.dependency_count : null;
+      const ticketCode = typeof payload.ticket_code === 'string' ? payload.ticket_code : null;
       return (
-        <div className="mt-2 flex gap-3 text-xs font-mono text-[#9198b4]">
+        <div className="mt-2 flex items-center gap-3 text-xs font-mono text-[#9198b4]">
+          {ticketCode && (
+            <span className="text-[10px] font-semibold bg-[#252a3a] border border-[#3a4060] px-1.5 py-0.5 rounded">{ticketCode}</span>
+          )}
           {subtaskCount != null && <span>{'\uC11C\uBE0C\uD0DC\uC2A4\uD06C'}: {subtaskCount}</span>}
           {depCount != null && <span>{'\uC758\uC874\uC131'}: {depCount}</span>}
+        </div>
+      );
+    }
+
+    case 'automation_triggered': {
+      const event = typeof payload.event === 'string' ? payload.event : null;
+      const rulesTriggered = Array.isArray(payload.rules_triggered) ? payload.rules_triggered as string[] : null;
+      const actionsTaken = Array.isArray(payload.actions_taken) ? payload.actions_taken as Record<string, unknown>[] : null;
+      return (
+        <div className="mt-2.5 bg-[rgba(148,163,184,0.04)] border border-[rgba(148,163,184,0.15)] border-l-[3px] border-l-slate-400 rounded-lg px-3.5 py-2.5">
+          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center gap-1.5">
+            <span>{'\u2699\uFE0F'}</span> {'\uC790\uB3D9\uD654 \uADDC\uCE59 \uC2E4\uD589'}
+          </div>
+          {event && (
+            <div className="text-[10px] font-mono text-[#9198b4] mb-1">
+              {'\uD2B8\uB9AC\uAC70'}: <span className="text-slate-300">{event}</span>
+            </div>
+          )}
+          {rulesTriggered && rulesTriggered.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-1.5">
+              {rulesTriggered.map((rule, i) => (
+                <span key={i} className="text-[10px] font-mono bg-slate-500/10 border border-slate-500/20 text-slate-300 px-1.5 py-0.5 rounded">{rule}</span>
+              ))}
+            </div>
+          )}
+          {actionsTaken && actionsTaken.length > 0 && (
+            <div className="space-y-0.5">
+              {actionsTaken.map((act, i) => {
+                const actType = typeof act.type === 'string' ? act.type : null;
+                const actConfig = typeof act.config === 'object' && act.config ? act.config as Record<string, unknown> : null;
+                return (
+                  <div key={i} className="text-[10px] font-mono text-[#555e7a]">
+                    {actType && <span className="text-slate-400">{actType}</span>}
+                    {actConfig && Object.keys(actConfig).length > 0 && (
+                      <span className="ml-1 text-[#555e7a]">({Object.entries(actConfig).map(([k, v]) => `${k}: ${String(v)}`).join(', ')})</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       );
     }
