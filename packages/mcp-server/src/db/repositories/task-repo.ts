@@ -186,4 +186,11 @@ export class TaskRepository {
     }
     return false;
   }
+
+  async delete(id: string): Promise<void> {
+    const pool = getPool();
+    await pool.query('DELETE FROM task_dependencies WHERE task_id = $1 OR depends_on = $1', [id]);
+    await pool.query('DELETE FROM activity_log WHERE task_id = $1', [id]);
+    await pool.query('DELETE FROM tasks WHERE id = $1', [id]);
+  }
 }

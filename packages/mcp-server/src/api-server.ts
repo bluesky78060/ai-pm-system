@@ -144,6 +144,13 @@ app.post('/api/tasks/:id/dependencies', wrapAsync(async (req) =>
   taskService.addDependency(req.params.id as string, req.body.depends_on_id)
 ));
 
+app.delete('/api/tasks/:id', wrapAsync(async (req) => {
+  const task = await taskService.getById(req.params.id as string);
+  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${req.params.id as string}`);
+  await taskService.delete(req.params.id as string);
+  return { message: `태스크 '${task.title}' 삭제됨` };
+}));
+
 // === Test & Fix routes ===
 app.get('/api/tasks/:id/fix-history', wrapAsync(async (req) =>
   testService.getFixHistory(req.params.id as string)

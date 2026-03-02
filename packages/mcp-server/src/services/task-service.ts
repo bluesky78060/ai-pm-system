@@ -260,6 +260,11 @@ export class TaskService {
     return { message: `의존성 추가: '${task.title}' → '${dep.title}'` };
   }
 
+  async delete(idOrCode: string): Promise<void> {
+    const task = await resolveTask(idOrCode);
+    await taskRepo.delete(task.id);
+  }
+
   async update(idOrCode: string, data: Partial<Task>): Promise<Task> {
     const task = await resolveTask(idOrCode);
     const updated = await taskRepo.update(task.id, data);
