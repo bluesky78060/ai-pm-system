@@ -47,7 +47,20 @@ export default function KanbanBoard({ tasks, epics }: KanbanBoardProps) {
   }, {});
 
   for (const status of Object.keys(tasksByStatus)) {
-    tasksByStatus[status].sort((a, b) => a.priority - b.priority);
+    if (status === 'done') {
+      // Done: 완료 시간 역순 (최근 완료가 위)
+      tasksByStatus[status].sort((a, b) => {
+        const aTime = a.completed_at ? new Date(a.completed_at).getTime() : 0;
+        const bTime = b.completed_at ? new Date(b.completed_at).getTime() : 0;
+        return bTime - aTime;
+      });
+    } else {
+      // 나머지: priority → seq 순
+      tasksByStatus[status].sort((a, b) => {
+        if (a.priority !== b.priority) return a.priority - b.priority;
+        return (a.seq ?? 0) - (b.seq ?? 0);
+      });
+    }
   }
 
   return (
