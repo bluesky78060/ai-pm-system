@@ -232,7 +232,7 @@ function ActivityContent({ activity }: { activity: Activity }) {
       const fail = Number(summary?.fail ?? payload.fail ?? 0);
       const skip = Number(summary?.skip ?? payload.skip ?? 0);
       const results = Array.isArray(payload.results) ? payload.results as Record<string, unknown>[] : null;
-      const runNumber = typeof payload.runNumber === 'number' ? payload.runNumber : null;
+      const runNumber = typeof payload.run_number === 'number' ? payload.run_number : (typeof payload.runNumber === 'number' ? payload.runNumber : null);
 
       return (
         <div className="mt-2.5">
@@ -252,17 +252,28 @@ function ActivityContent({ activity }: { activity: Activity }) {
               {results.map((r, i) => {
                 const st = String(r.status ?? 'unknown');
                 const isFail = st === 'fail';
+                const outputStr = typeof r.output === 'string' ? r.output : null;
                 return (
-                  <div key={i} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs ${isFail ? 'border-red-500/20 bg-[#1A1D2E]' : 'border-[#2e3348] bg-[#1A1D2E]'}`}>
-                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${isFail ? 'bg-red-500/15 text-red-400' : 'bg-green-500/15 text-green-400'}`}>
-                      {isFail ? '\u2715' : '\u2713'}
-                    </span>
-                    <span className="text-[#9198b4] flex-1">{String(r.name ?? '')}</span>
-                    {r.runner ? <span className="font-mono text-[10px] text-[#555e7a]">{String(r.runner)}</span> : null}
-                    {r.duration_ms != null && (
-                      <span className="font-mono text-[10px] text-[#555e7a] min-w-[36px] text-right">{Number(r.duration_ms)}ms</span>
+                  <details key={i} open={isFail && !!outputStr} className={`rounded-lg border text-xs ${isFail ? 'border-red-500/20 bg-[#1A1D2E]' : 'border-[#2e3348] bg-[#1A1D2E]'}`}>
+                    <summary className={`flex items-center gap-2 px-2.5 py-1.5 ${outputStr ? 'cursor-pointer list-none' : 'list-none'}`}>
+                      <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${isFail ? 'bg-red-500/15 text-red-400' : 'bg-green-500/15 text-green-400'}`}>
+                        {isFail ? '\u2715' : '\u2713'}
+                      </span>
+                      <span className="text-[#9198b4] flex-1">{String(r.name ?? '')}</span>
+                      {r.runner ? <span className="font-mono text-[10px] text-[#555e7a]">{String(r.runner)}</span> : null}
+                      {r.duration_ms != null && (
+                        <span className="font-mono text-[10px] text-[#555e7a] min-w-[36px] text-right">{Number(r.duration_ms)}ms</span>
+                      )}
+                      {outputStr && (
+                        <span className={`font-mono text-[10px] shrink-0 ${isFail ? 'text-red-400/60' : 'text-[#555e7a]'}`}>output</span>
+                      )}
+                    </summary>
+                    {outputStr && (
+                      <div className={`mx-2.5 mb-2 mt-1 rounded border ${isFail ? 'border-red-500/20' : 'border-[#2e3348]'} max-h-[200px] overflow-y-auto`}>
+                        <pre className="font-mono text-[11px] text-[#9198b4] whitespace-pre-wrap p-2 leading-relaxed">{outputStr}</pre>
+                      </div>
                     )}
-                  </div>
+                  </details>
                 );
               })}
             </div>
@@ -410,6 +421,42 @@ function ActivityContent({ activity }: { activity: Activity }) {
         <div className="mt-2 text-xs font-mono text-[#9198b4]">
           <span className="text-[#555e7a]">{field}:</span>{' '}
           {String(payload.from ?? '\u2014')} <span className="text-[#555e7a]">{'\u2192'}</span> {String(payload.to ?? '\u2014')}
+        </div>
+      );
+    }
+
+    case 'workflow_review_approved': {
+      const notes = typeof payload.notes === 'string' ? payload.notes : null;
+      const epicProgress = typeof payload.epic_progress === 'object' && payload.epic_progress ? payload.epic_progress as Record<string, unknown> : null;
+      return (
+        <div className="mt-2.5">
+          {notes && (
+            <details open className="rounded-lg border border-green-500/20 bg-[#1A1D2E]">
+              <summary className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer list-none text-xs">
+                <span className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 bg-green-500/15 text-green-400">{'\u2713'}</span>
+                <span className="text-[#9198b4] flex-1">{'\uCF54\uB4DC \uB9AC\uBDF0 \uACB0\uACFC'}</span>
+              </summary>
+              <div className="mx-2.5 mb-2 mt-1 rounded border border-[#2e3348] max-h-[200px] overflow-y-auto">
+                <pre className="font-mono text-[11px] text-[#9198b4] whitespace-pre-wrap p-2 leading-relaxed">{notes}</pre>
+              </div>
+            </details>
+          )}
+          {epicProgress && (
+            <div className="mt-1.5 text-[10px] font-mono text-[#555e7a]">
+              {'\uC5D0\uD53D \uC9C4\uD589\uB960'}: {String(epicProgress.completed ?? 0)}/{String(epicProgress.total ?? 0)} ({String(epicProgress.rate ?? 0)}%)
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    case 'workflow_start': {
+      const subtaskCount = typeof payload.subtask_count === 'number' ? payload.subtask_count : null;
+      const depCount = typeof payload.dependency_count === 'number' ? payload.dependency_count : null;
+      return (
+        <div className="mt-2 flex gap-3 text-xs font-mono text-[#9198b4]">
+          {subtaskCount != null && <span>{'\uC11C\uBE0C\uD0DC\uC2A4\uD06C'}: {subtaskCount}</span>}
+          {depCount != null && <span>{'\uC758\uC874\uC131'}: {depCount}</span>}
         </div>
       );
     }

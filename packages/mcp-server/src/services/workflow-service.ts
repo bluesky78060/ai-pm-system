@@ -171,6 +171,8 @@ export class WorkflowService {
           status: r.status,
           duration_ms: r.duration_ms,
           runner: r.test_type,
+          output: r.output,
+          failures: r.failures,
         })),
         next_status: task.status,
       },

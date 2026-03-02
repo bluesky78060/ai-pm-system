@@ -61,11 +61,51 @@
 
 ### 상태별 에이전트 매핑 (필수)
 
-| 상태 | 실제 수행 | 에이전트 |
-|------|----------|---------|
-| `in_progress` | 코드 작성 | executor / executor-high |
-| `testing` | 빌드 + 테스트 실행 | build-fixer (실패 시) |
-| `review` | 코드 리뷰 | code-reviewer |
+각 워크플로우 단계에서 작업 복잡도에 따라 적절한 에이전트를 선택한다.
+
+#### in_progress (코드 작성)
+
+| 작업 복잡도 | 에이전트 | 모델 |
+|------------|---------|------|
+| 단순 변경 (1-2줄, 오타, 설정) | `executor-low` | haiku |
+| 기능 구현 (일반적인 기능 추가/수정) | `executor` | sonnet |
+| 복잡한 리팩토링 (아키텍처 변경, 다중 파일) | `executor-high` | opus |
+| UI 컴포넌트 작업 | `designer` | sonnet |
+| 복잡한 UI 시스템 (디자인 시스템, 다중 화면) | `designer-high` | opus |
+
+#### testing (빌드 + 테스트 실행)
+
+| 상황 | 에이전트 | 모델 |
+|------|---------|------|
+| 빌드 실패 시 간단한 수정 | `build-fixer-low` | haiku |
+| 빌드/타입 에러 해결 | `build-fixer` | sonnet |
+| CLI/통합 테스트 실행 | `qa-tester` | sonnet |
+
+#### review (코드 리뷰)
+
+| 리뷰 범위 | 에이전트 | 모델 |
+|----------|---------|------|
+| 소규모 변경 빠른 점검 | `code-reviewer-low` | haiku |
+| 전체 코드 리뷰 (기본) | `code-reviewer` | opus |
+| 보안 취약점 점검 | `security-reviewer` | opus |
+| 빠른 보안 스캔 | `security-reviewer-low` | haiku |
+
+#### 탐색/분석 (작업 전 컨텍스트 파악)
+
+| 용도 | 에이전트 | 모델 |
+|------|---------|------|
+| 빠른 파일/코드 검색 | `explore` | haiku |
+| 중간 수준 탐색 | `explore-medium` | sonnet |
+| 복잡한 아키텍처 분석 | `explore-high` | opus |
+| 간단한 디버깅 | `architect-low` | haiku |
+| 복잡한 디버깅/아키텍처 결정 | `architect` | opus |
+| 외부 문서/API 조사 | `researcher` | sonnet |
+
+#### 에이전트 선택 원칙
+
+1. **비용 최적화**: 간단한 작업에 opus를 쓰지 않는다. haiku로 충분한 작업은 haiku를 사용한다.
+2. **병렬 활용**: 독립적인 작업은 여러 에이전트를 동시에 실행한다.
+3. **단계적 상승**: 먼저 낮은 티어로 시도하고, 실패하면 높은 티어로 에스컬레이션한다.
 
 ### 금지 사항
 
