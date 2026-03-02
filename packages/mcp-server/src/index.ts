@@ -55,7 +55,36 @@ const automationService = remote ? null! : new AutomationService();
 // Create MCP server
 const server = new Server(
   { name: 'ai-pm-system', version: '1.0.0' },
-  { capabilities: { tools: {} } },
+  {
+    capabilities: { tools: {} },
+    instructions: `AI PM System - 워크플로우 규칙
+
+모든 코드 변경 작업은 반드시 티켓을 발행한 후 진행해야 합니다.
+
+## 필수 워크플로우
+1. create_task로 티켓 발행 (epic_id 필수)
+2. smart_workflow(task_id, 'start_work') → in_progress (병렬 전환 가능)
+3. 에이전트에 위임하여 코드 작성 (복잡도별 선택):
+   - 단순: executor-low(haiku) / 표준: executor(sonnet) / 복잡: executor-high(opus)
+   - UI: designer(sonnet) / 복잡 UI: designer-high(opus)
+   - 스킬: /autopilot, /ultrawork, /ecomode, /ultrapilot, /ralph, /tdd
+4. 빌드/테스트 실행 후 smart_workflow(task_id, 'submit_test', test_results=[...])
+   - build 타입 필수, output 10자 이상 (실제 빌드 출력)
+   - 실패시: build-fixer(sonnet) 또는 /build-fix 스킬 사용
+5. code-reviewer(opus) 또는 /code-review 스킬로 리뷰 수행
+   smart_workflow(task_id, 'approve_review', notes='리뷰결과') (20자 이상)
+6. 자동 done 전환
+
+## 금지 사항
+- 티켓 없이 코드 변경 금지
+- update_task_status로 testing→review, review→done 직접 전환 금지 (서버 차단됨)
+- 빌드 미실행 submit_test / 리뷰 미수행 approve_review 금지
+
+## 병렬 작업
+- 여러 태스크를 동시에 in_progress 전환 가능
+- 하나의 태스크에 여러 에이전트를 파일별로 분배하여 병렬 투입 가능
+- 파일 충돌 방지: 같은 파일을 여러 에이전트가 동시 수정 금지`,
+  },
 );
 
 // Register tools list
@@ -428,7 +457,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     // Subagent tools
     {
       name: 'smart_workflow',
-      description: 'Execute compound workflow actions. testing→review and review→done transitions are ONLY allowed through this tool. submit_test requires REAL build/test output (pnpm -r build). approve_review requires REAL code review findings (20+ chars).',
+      description: 'Execute compound workflow actions. testing→review and review→done transitions are ONLY allowed through this tool.\n\nAgent routing per action:\n- start_work: Parallel OK. After transition, delegate to executor(sonnet)/executor-high(opus)/designer(sonnet) based on complexity.\n- submit_test: Run pnpm -r build FIRST. Use build-fixer(sonnet) if fails. Include REAL output (10+ chars).\n- approve_review: Run code-reviewer(opus) or /code-review skill FIRST. Include REAL review findings (20+ chars).\n- complete_fix: Use build-fixer or executor to fix, then re-test.\n\nSkills: /autopilot(auto), /ultrawork(parallel), /ecomode(budget), /build-fix(errors), /ultraqa(test-loop), /code-review, /security-review.',
       inputSchema: {
         type: 'object' as const,
         properties: {
