@@ -18,22 +18,66 @@
 1. **에픽 확인/생성**: `get_project_status`로 기존 에픽 목록을 확인. 새로운 기능 영역이면 `create_epic`으로 에픽 추가.
 2. **티켓 발행**: `create_task`로 티켓 생성. 반드시 `epic_id` 지정.
 3. **작업 시작**: `smart_workflow(task_id, 'start_work')` 호출 → `in_progress` 전환.
+   - **여러 태스크를 동시에 `in_progress`로 전환 가능** (병렬 작업 지원)
+   - 독립적인 태스크들은 동시에 `start_work` 호출하여 병렬 진행
 4. **코드 작성 (in_progress)**: **executor 에이전트**에 위임하여 실제 코드 작성.
    - 복잡한 작업: `executor-high` (Opus)
    - 표준 작업: `executor` (Sonnet)
    - 단순 변경: `executor-low` (Haiku)
-   - 여러 파일 변경 시 병렬 에이전트 활용 가능
-5. **검증 (testing)**: 코드 작성 완료 후 **실제 빌드/테스트 실행**:
+   - **하나의 태스크에 여러 에이전트를 병렬 투입 가능** (파일별 분배)
+
+### 병렬 작업 패턴
+
+#### 패턴 1: 다중 태스크 병렬 진행
+
+독립적인 태스크 여러 개를 동시에 `in_progress`로 전환하고 각각에 에이전트를 배정한다.
+
+```
+# 여러 태스크를 동시에 시작
+smart_workflow(task_A, 'start_work')  # 프론트엔드 작업
+smart_workflow(task_B, 'start_work')  # 백엔드 작업
+smart_workflow(task_C, 'start_work')  # 문서 작업
+
+# 각 태스크에 적절한 에이전트 배정 (병렬 실행)
+Agent(designer, "task_A: UI 컴포넌트 구현")
+Agent(executor, "task_B: API 엔드포인트 추가")
+Agent(writer, "task_C: API 문서 작성")
+```
+
+#### 패턴 2: 단일 태스크에 다중 에이전트 병렬 투입
+
+하나의 태스크를 파일/영역별로 나눠서 여러 에이전트가 동시에 작업한다.
+
+```
+# 하나의 태스크에 여러 에이전트를 동시에 투입
+smart_workflow(task_id, 'start_work')
+
+# 파일 소유권 분배 (충돌 방지)
+Agent(executor, "task: 백엔드 service 수정 - service.ts만 수정")
+Agent(designer, "task: 프론트엔드 UI 수정 - Component.tsx만 수정")
+Agent(executor-low, "task: 타입 정의 수정 - types.ts만 수정")
+```
+
+#### 병렬 작업 규칙
+
+1. **파일 충돌 방지**: 같은 파일을 여러 에이전트가 동시에 수정하지 않는다. 파일별로 소유권을 분배한다.
+2. **의존성 확인**: 태스크 간 의존성이 있으면 순차 실행. `get_blocking_analysis`로 확인.
+3. **검증은 모든 병렬 작업 완료 후**: 모든 에이전트 작업이 끝난 뒤 한 번에 `submit_test` 호출.
+4. **독립적인 태스크만 병렬**: 서로 의존하는 태스크는 순차 진행.
+
+### 작업 프로세스 (계속)
+
+1. **검증 (testing)**: 코드 작성 완료 후 **실제 빌드/테스트 실행**:
    - `pnpm -r build` 실행하여 빌드 결과 수집
    - `pnpm test` 실행하여 테스트 결과 수집 (있는 경우)
    - `smart_workflow(task_id, 'submit_test', test_results=[...])` 호출
    - **test_results에 반드시 build 타입 포함 + 실제 출력(output) 10자 이상 필수**
    - 통과 → 자동으로 `review` 전환 / 실패 → `fixing` 전환
-6. **코드 리뷰 (review)**: **code-reviewer 에이전트**에 위임하여 실제 코드 리뷰 수행.
+2. **코드 리뷰 (review)**: **code-reviewer 에이전트**에 위임하여 실제 코드 리뷰 수행.
    - 리뷰 결과(발견사항, 승인/거부)를 받아서
    - `smart_workflow(task_id, 'approve_review', notes='리뷰 결과 상세')` 호출
    - **notes 20자 이상 필수 (실제 리뷰 결과)**
-7. **완료**: 리뷰 승인 시 자동으로 `done` 전환. 에픽 진행률 + 다음 추천 태스크 반환.
+3. **완료**: 리뷰 승인 시 자동으로 `done` 전환. 에픽 진행률 + 다음 추천 태스크 반환.
 
 ### 티켓코드 형식
 
