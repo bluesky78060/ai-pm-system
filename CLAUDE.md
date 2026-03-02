@@ -103,9 +103,9 @@ Agent(executor-low, "task: 타입 정의 수정 - types.ts만 수정")
 | `get_session_context` | 현재 작업 컨텍스트 조회 |
 | `get_blocking_analysis` | 블로킹 분석 |
 
-### 상태별 에이전트 매핑 (필수)
+### 상태별 에이전트 + 스킬 매핑 (필수)
 
-각 워크플로우 단계에서 작업 복잡도에 따라 적절한 에이전트를 선택한다.
+각 워크플로우 단계에서 작업 복잡도에 따라 적절한 **에이전트**와 **스킬**을 선택한다.
 
 #### in_progress (코드 작성)
 
@@ -117,6 +117,19 @@ Agent(executor-low, "task: 타입 정의 수정 - types.ts만 수정")
 | UI 컴포넌트 작업 | `designer` | sonnet |
 | 복잡한 UI 시스템 (디자인 시스템, 다중 화면) | `designer-high` | opus |
 
+**활용 가능 스킬:**
+
+| 상황 | 스킬 | 설명 |
+|------|-----|------|
+| 대규모 기능 자율 구현 | `/autopilot` | 아이디어 → 완성 코드까지 자율 실행 |
+| 최대 병렬 실행이 필요할 때 | `/ultrawork` | 여러 에이전트 동시 투입, 최대 속도 |
+| 토큰 절약하며 병렬 실행 | `/ecomode` | haiku/sonnet 에이전트 위주 병렬 |
+| 5배속 병렬 자율 실행 | `/ultrapilot` | 파일 소유권 분배 + 최대 5개 워커 병렬 |
+| 복잡한 작업을 끝까지 완수 | `/ralph` | 완료될 때까지 반복 루프 |
+| UI/프론트엔드 작업 | `/frontend-ui-ux` | 디자인 감각 적용 (자동 활성화) |
+| 사전 계획이 필요할 때 | `/plan` 또는 `/ralplan` | 구현 전략 수립 후 실행 |
+| TDD 방식 개발 | `/tdd` | 테스트 먼저 작성 후 구현 |
+
 #### testing (빌드 + 테스트 실행)
 
 | 상황 | 에이전트 | 모델 |
@@ -124,6 +137,13 @@ Agent(executor-low, "task: 타입 정의 수정 - types.ts만 수정")
 | 빌드 실패 시 간단한 수정 | `build-fixer-low` | haiku |
 | 빌드/타입 에러 해결 | `build-fixer` | sonnet |
 | CLI/통합 테스트 실행 | `qa-tester` | sonnet |
+
+**활용 가능 스킬:**
+
+| 상황 | 스킬 | 설명 |
+|------|-----|------|
+| 빌드 에러 자동 수정 | `/build-fix` | 최소 변경으로 빌드 에러 해결 |
+| 테스트/검증 반복 사이클 | `/ultraqa` | 테스트 → 수정 → 재테스트 반복 |
 
 #### review (코드 리뷰)
 
@@ -133,6 +153,14 @@ Agent(executor-low, "task: 타입 정의 수정 - types.ts만 수정")
 | 전체 코드 리뷰 (기본) | `code-reviewer` | opus |
 | 보안 취약점 점검 | `security-reviewer` | opus |
 | 빠른 보안 스캔 | `security-reviewer-low` | haiku |
+
+**활용 가능 스킬:**
+
+| 상황 | 스킬 | 설명 |
+|------|-----|------|
+| 종합 코드 리뷰 | `/code-review` | 품질, 보안, 유지보수성 점검 |
+| 보안 전문 리뷰 | `/security-review` | OWASP Top 10 취약점 탐지 |
+| 코드 간소화 | `/simplify` | 변경된 코드의 재사용성, 품질 검토 |
 
 #### 탐색/분석 (작업 전 컨텍스트 파악)
 
@@ -144,6 +172,21 @@ Agent(executor-low, "task: 타입 정의 수정 - types.ts만 수정")
 | 간단한 디버깅 | `architect-low` | haiku |
 | 복잡한 디버깅/아키텍처 결정 | `architect` | opus |
 | 외부 문서/API 조사 | `researcher` | sonnet |
+
+**활용 가능 스킬:**
+
+| 상황 | 스킬 | 설명 |
+|------|-----|------|
+| 코드베이스 깊은 검색 | `/deepsearch` | 키워드/패턴 기반 철저한 탐색 |
+| 심층 분석/디버깅 | `/analyze` | 원인 분석, 아키텍처 조사 |
+| 병렬 리서치 | `/research` | 여러 scientist 에이전트로 동시 조사 |
+
+#### 고급 오케스트레이션 스킬
+
+| 스킬 | 설명 | 사용 시점 |
+|-----|------|----------|
+| `/swarm` | N개 에이전트가 공유 태스크 풀에서 작업 | 대량의 독립적 작업 (예: 파일별 수정) |
+| `/pipeline` | 에이전트 순차 체이닝 (explore→architect→executor) | 단계별 의존성 있는 작업 |
 
 #### 에이전트 선택 원칙
 
