@@ -3,6 +3,7 @@ import { EpicRepository } from '../db/repositories/epic-repo.js';
 import { ActivityRepository } from '../db/repositories/activity-repo.js';
 import { UUID_REGEX } from '../utils/code-gen.js';
 import type { Task, TaskStatus } from '../types/index.js';
+import { notificationService } from './notification-service.js';
 
 const taskRepo = new TaskRepository();
 const epicRepo = new EpicRepository();
@@ -226,6 +227,17 @@ export class TaskService {
       },
     });
 
+    // Slack 알림 전송 (비동기, 에러 무시)
+    notificationService.notifyStatusChange({
+      task: updated,
+      previousStatus,
+      newStatus,
+      notes,
+      extra,
+    }).catch(err => {
+      console.error('[TaskService] Notification failed:', err);
+    });
+
     return {
       task: updated,
       previousStatus,
@@ -315,5 +327,41 @@ export class TaskService {
 
   async getStatusCounts(projectId: string): Promise<Record<string, number>> {
     return taskRepo.countByStatus(projectId);
+  }
+
+  /**
+   * 지연된 태스크(7일 이상 in_progress)를 찾아 알림을 전송합니다.
+   */
+  async notifyStaleTasks(projectId?: string): Promise<{ notified: number; tasks: Task[] }> {
+    const filters = projectId ? { project_id: projectId, status: 'in_progress' } : { status: 'in_progress' };
+    const inProgressTasks = await taskRepo.findAll(filters);
+
+    const staleTasks: Task[] = [];
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+    for (const task of inProgressTasks) {
+      // in_progress로 전환된 시점 찾기
+      const activities = await activityRepo.findByTask(task.id, 100);
+      const lastInProgressChange = activities.reverse().find(a => {
+        if (a.action !== 'status_change') return false;
+        const p = (typeof a.payload === 'object' && a.payload !== null) ? a.payload as Record<string, unknown> : {};
+        return p.to === 'in_progress';
+      });
+
+      if (lastInProgressChange) {
+        const changeTime = new Date(lastInProgressChange.created_at).getTime();
+        const daysInProgress = Math.floor((Date.now() - changeTime) / (24 * 60 * 60 * 1000));
+
+        if (changeTime < sevenDaysAgo) {
+          staleTasks.push(task);
+          // 알림 전송 (비동기, 에러 무시)
+          notificationService.notifyStaleTask(task, daysInProgress).catch(err => {
+            console.error(`[TaskService] Failed to notify stale task ${task.id}:`, err);
+          });
+        }
+      }
+    }
+
+    return { notified: staleTasks.length, tasks: staleTasks };
   }
 }
