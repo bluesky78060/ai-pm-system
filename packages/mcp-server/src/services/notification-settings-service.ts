@@ -1,6 +1,8 @@
 import { getPool } from '../db/connection.js';
 import { randomUUID } from 'crypto';
 
+const ALLOWED_EVENT_TYPES = ['status_change', 'task_blocked', 'task_stale', 'pr_merged', 'test_complete'] as const;
+
 export interface NotificationCondition {
   priority?: number[]; // 특정 우선순위만
   assignee?: string[]; // 특정 담당자만
@@ -71,6 +73,10 @@ export class NotificationSettingsService {
     enabled: boolean,
     conditions?: NotificationCondition
   ): Promise<NotificationSetting> {
+    if (!ALLOWED_EVENT_TYPES.includes(eventType as any)) {
+      throw new Error(`Invalid event type: ${eventType}. Allowed: ${ALLOWED_EVENT_TYPES.join(', ')}`);
+    }
+
     const pool = getPool();
     const id = randomUUID();
     const now = new Date().toISOString();

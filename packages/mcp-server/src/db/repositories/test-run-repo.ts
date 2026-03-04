@@ -15,6 +15,15 @@ export class TestRunRepository {
     return rows as TestRun[];
   }
 
+  async findByTasks(taskIds: string[]): Promise<TestRun[]> {
+    if (taskIds.length === 0) return [];
+    const { rows } = await getPool().query(
+      'SELECT * FROM test_runs WHERE task_id = ANY($1) ORDER BY run_number DESC, created_at DESC',
+      [taskIds]
+    );
+    return rows as TestRun[];
+  }
+
   async getLatestRunNumber(taskId: string): Promise<number> {
     const { rows: [row] } = await getPool().query(
       'SELECT COALESCE(MAX(run_number), 0) as max_run FROM test_runs WHERE task_id = $1', [taskId]

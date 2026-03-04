@@ -168,6 +168,15 @@ export class TaskRepository {
     return rows as TaskDependency[];
   }
 
+  async getDependenciesBatch(taskIds: string[]): Promise<TaskDependency[]> {
+    if (taskIds.length === 0) return [];
+    const { rows } = await getPool().query(
+      'SELECT * FROM task_dependencies WHERE task_id = ANY($1)',
+      [taskIds]
+    );
+    return rows as TaskDependency[];
+  }
+
   async hasCircularDependency(taskId: string, dependsOn: string): Promise<boolean> {
     const pool = getPool();
     const visited = new Set<string>();

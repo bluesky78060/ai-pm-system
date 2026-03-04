@@ -6,6 +6,15 @@ import { getPool } from '../db/connection.js';
 const taskRepo = new TaskRepository();
 const savedSearchRepo = new SavedSearchRepository();
 
+/**
+ * Escape special characters in LIKE patterns to prevent injection
+ * @param str - String to escape
+ * @returns Escaped string safe for LIKE queries
+ */
+function escapeLikePattern(str: string): string {
+  return str.replace(/[%_\\]/g, '\\$&');
+}
+
 export class SearchService {
   /**
    * Search tasks with full-text search and multiple filters
@@ -19,8 +28,8 @@ export class SearchService {
 
     // Full-text search on title and description (case-insensitive)
     if (query && query.trim().length > 0) {
-      conditions.push(`(title ILIKE $${idx} OR description ILIKE $${idx})`);
-      values.push(`%${query.trim()}%`);
+      conditions.push(`(title ILIKE $${idx} ESCAPE '\\' OR description ILIKE $${idx} ESCAPE '\\')`);
+      values.push(`%${escapeLikePattern(query.trim())}%`);
       idx++;
     }
 

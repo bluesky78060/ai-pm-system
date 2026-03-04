@@ -42,7 +42,7 @@ export default function SearchBar({ onSearchResults, epics = [] }: SearchBarProp
       return;
     }
     try {
-      await api.saveSear('default-user', saveName, query, filters);
+      await api.saveSearch('default-user', saveName, query, filters);
       alert('검색이 저장되었습니다');
       setSaveName('');
       setShowSaveDialog(false);

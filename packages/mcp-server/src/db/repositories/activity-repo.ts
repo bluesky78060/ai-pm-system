@@ -31,6 +31,15 @@ export class ActivityRepository {
     return rows.map(row => this.deserialize(row as ActivityLog));
   }
 
+  async findByTasks(taskIds: string[]): Promise<ActivityLog[]> {
+    if (taskIds.length === 0) return [];
+    const { rows } = await getPool().query(
+      'SELECT * FROM activity_log WHERE task_id = ANY($1) ORDER BY created_at DESC',
+      [taskIds]
+    );
+    return rows.map(row => this.deserialize(row as ActivityLog));
+  }
+
   async logAiAnalysis(taskId: string, analysis: string, context?: Record<string, unknown>): Promise<ActivityLog> {
     return this.create({
       task_id: taskId,

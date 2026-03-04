@@ -107,9 +107,50 @@ export class AutoAssignmentService {
 
     const recommendations: AssigneeSuggestion[] = [];
 
-    for (const task of unassignedTasks) {
-      const suggestion = await this.suggestAssignee(task.id);
-      recommendations.push(suggestion);
+    // N+1 쿼리 최적화: 모든 태스크의 데이터를 배치로 fetch
+    const taskIds = unassignedTasks.map(t => t.id);
+
+    // 병렬로 모든 활동 및 의존성 데이터 fetch
+    const [allActivities, allDependencies] = await Promise.all([
+      Promise.all(taskIds.map(id => activityRepo.findByTask(id, 50))),
+      Promise.all(taskIds.map(id => taskRepo.getDependencies(id))),
+    ]);
+
+    // 미리 fetch한 데이터를 사용하여 각 태스크 처리 (DB 호출 없음)
+    for (let i = 0; i < unassignedTasks.length; i++) {
+      const task = unassignedTasks[i];
+      const context = {
+        activities: allActivities[i],
+        dependencies: allDependencies[i],
+        hasDescription: !!task.description && task.description.length > 10,
+        estimatedHours: task.estimated_hrs || 0,
+      };
+
+      // 태스크 분석
+      const analysis = this.analyzeTask(task, context);
+
+      // 적절한 에이전트 선택
+      const { agent, model, reasoning } = this.selectAgent(analysis);
+
+      // 신뢰도 계산
+      const confidence = this.calculateConfidence(analysis, reasoning.length);
+
+      recommendations.push({
+        task_id: task.id,
+        ticket_code: task.ticket_code,
+        title: task.title,
+        current_assignee: task.assignee,
+        suggested_assignee: agent,
+        model_tier: model,
+        confidence,
+        reasoning,
+        context: {
+          task_type: analysis.type,
+          complexity_score: analysis.complexity,
+          status: task.status,
+          keywords: analysis.keywords,
+        },
+      });
     }
 
     // 신뢰도와 우선순위를 기준으로 정렬

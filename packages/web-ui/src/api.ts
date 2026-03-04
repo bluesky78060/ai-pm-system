@@ -125,7 +125,7 @@ export const api = {
     request<{ tasks: Task[] }>('/tasks/search', { method: 'POST', body: JSON.stringify({ query, filters }) }),
 
   // Saved Searches
-  saveSear: (userId: string, name: string, query: string, filters?: any) =>
+  saveSearch: (userId: string, name: string, query: string, filters?: any) =>
     request<{ id: string; user_id: string; name: string; query: string; filters?: any; created_at: string }>('/saved-searches', { method: 'POST', body: JSON.stringify({ user_id: userId, name, query, filters }) }),
   getSavedSearches: (userId: string) =>
     request<{ saved_searches: { id: string; user_id: string; name: string; query: string; filters?: any; created_at: string }[] }>(`/saved-searches?user_id=${userId}`),

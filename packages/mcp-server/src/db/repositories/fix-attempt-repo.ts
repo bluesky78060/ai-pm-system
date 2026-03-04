@@ -15,6 +15,15 @@ export class FixAttemptRepository {
     return rows as FixAttempt[];
   }
 
+  async findByTasks(taskIds: string[]): Promise<FixAttempt[]> {
+    if (taskIds.length === 0) return [];
+    const { rows } = await getPool().query(
+      'SELECT * FROM fix_attempts WHERE task_id = ANY($1) ORDER BY attempt_number DESC',
+      [taskIds]
+    );
+    return rows as FixAttempt[];
+  }
+
   async getLatestAttemptNumber(taskId: string): Promise<number> {
     const { rows: [row] } = await getPool().query(
       'SELECT COALESCE(MAX(attempt_number), 0) as max_attempt FROM fix_attempts WHERE task_id = $1', [taskId]
