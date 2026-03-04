@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type Project, type ProjectStatus } from '../api';
+import EpicProgressChart from '../components/charts/EpicProgressChart';
+import BottleneckChart from '../components/charts/BottleneckChart';
+import VelocityChart from '../components/charts/VelocityChart';
 
 const STATUS_COLORS: Record<string, string> = {
   todo: 'bg-gray-600',
@@ -17,6 +20,7 @@ export default function Dashboard() {
   const [statuses, setStatuses] = useState<Record<string, ProjectStatus>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -44,6 +48,13 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // Auto-select first project for charts
+  useEffect(() => {
+    if (projects.length > 0 && !selectedProject) {
+      setSelectedProject(projects[0].id);
+    }
+  }, [projects, selectedProject]);
+
   if (loading) {
     return <div className="text-gray-400 animate-pulse">Loading...</div>;
   }
@@ -59,61 +70,118 @@ export default function Dashboard() {
     );
   }
 
+  const selectedStatus = selectedProject ? statuses[selectedProject] : null;
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Projects</h1>
-      <div className="grid gap-4">
-        {projects.map((project) => {
-          const status = statuses[project.id];
-          const summary = status?.summary;
-          return (
-            <Link
-              key={project.id}
-              to={`/projects/${project.id}`}
-              className="block bg-gray-900 border border-gray-800 rounded-lg p-5 hover:border-gray-600 transition-colors"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h2 className="text-lg font-semibold">{project.name}</h2>
-                  {project.description && (
-                    <p className="text-sm text-gray-400 mt-1">{project.description}</p>
-                  )}
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+          Dashboard
+        </h1>
+        {projects.length > 1 && (
+          <select
+            value={selectedProject || ''}
+            onChange={(e) => setSelectedProject(e.target.value)}
+            className="px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm font-medium text-gray-200 hover:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* Data Visualization Section */}
+      {selectedStatus && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Epic Progress Chart */}
+          <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-6 backdrop-blur">
+            <EpicProgressChart epics={selectedStatus.epics} />
+          </div>
+
+          {/* Bottleneck Chart */}
+          <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-6 backdrop-blur">
+            <BottleneckChart statusBreakdown={selectedStatus.summary.statusBreakdown} />
+          </div>
+
+          {/* Velocity Chart - Full Width */}
+          <div className="lg:col-span-2 bg-gray-900/50 border border-gray-800 rounded-xl p-6 backdrop-blur">
+            <VelocityChart projectId={selectedProject!} />
+          </div>
+        </div>
+      )}
+
+      {/* Project List */}
+      <div>
+        <h2 className="text-xl font-bold mb-4 text-gray-300">All Projects</h2>
+        <div className="grid gap-4">
+          {projects.map((project) => {
+            const status = statuses[project.id];
+            const summary = status?.summary;
+            const isSelected = selectedProject === project.id;
+            return (
+              <Link
+                key={project.id}
+                to={`/projects/${project.id}`}
+                onClick={(e) => {
+                  // Allow selecting project for charts without navigating
+                  if (e.metaKey || e.ctrlKey) {
+                    e.preventDefault();
+                    setSelectedProject(project.id);
+                  }
+                }}
+                className={`block bg-gray-900 border rounded-lg p-5 transition-all ${
+                  isSelected
+                    ? 'border-blue-500 shadow-lg shadow-blue-500/20'
+                    : 'border-gray-800 hover:border-gray-600'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h2 className="text-lg font-semibold">{project.name}</h2>
+                    {project.description && (
+                      <p className="text-sm text-gray-400 mt-1">{project.description}</p>
+                    )}
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded ${project.status === 'active' ? 'bg-green-900 text-green-300' : 'bg-gray-800 text-gray-400'}`}>
+                    {project.status}
+                  </span>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded ${project.status === 'active' ? 'bg-green-900 text-green-300' : 'bg-gray-800 text-gray-400'}`}>
-                  {project.status}
-                </span>
-              </div>
-              {summary && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 text-sm text-gray-400">
-                    <span>{summary.totalEpics} epics</span>
-                    <span>{summary.totalTasks} tasks</span>
-                    <span className="text-green-400 font-medium">{summary.completionRate}% complete</span>
+                {summary && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 text-sm text-gray-400">
+                      <span>{summary.totalEpics} epics</span>
+                      <span>{summary.totalTasks} tasks</span>
+                      <span className="text-green-400 font-medium">{summary.completionRate}% complete</span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="h-2 bg-gray-800 rounded-full overflow-hidden flex">
+                      {Object.entries(summary.statusBreakdown).map(([s, count]) => (
+                        <div
+                          key={s}
+                          className={`${STATUS_COLORS[s] ?? 'bg-gray-600'} transition-all`}
+                          style={{ width: `${summary.totalTasks > 0 ? (count / summary.totalTasks) * 100 : 0}%` }}
+                          title={`${s}: ${count}`}
+                        />
+                      ))}
+                    </div>
+                    {/* Status badges */}
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(summary.statusBreakdown).map(([s, count]) => (
+                        <span key={s} className="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-300">
+                          {s}: {count}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  {/* Progress bar */}
-                  <div className="h-2 bg-gray-800 rounded-full overflow-hidden flex">
-                    {Object.entries(summary.statusBreakdown).map(([s, count]) => (
-                      <div
-                        key={s}
-                        className={`${STATUS_COLORS[s] ?? 'bg-gray-600'} transition-all`}
-                        style={{ width: `${summary.totalTasks > 0 ? (count / summary.totalTasks) * 100 : 0}%` }}
-                        title={`${s}: ${count}`}
-                      />
-                    ))}
-                  </div>
-                  {/* Status badges */}
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(summary.statusBreakdown).map(([s, count]) => (
-                      <span key={s} className="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-300">
-                        {s}: {count}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Link>
-          );
-        })}
+                )}
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

@@ -12,6 +12,11 @@ import { WorkflowService } from './services/workflow-service.js';
 import { AnalysisService } from './services/analysis-service.js';
 import { AutomationService } from './services/automation-service.js';
 import { TimeTrackingService } from './services/time-tracking-service.js';
+import { PriorityRecommendationService } from './services/priority-recommendation-service.js';
+import { WorkloadService } from './services/workload-service.js';
+import { TemplateService } from './services/template-service.js';
+import { ExportService } from './services/export-service.js';
+import { AutoAssignmentService } from './services/auto-assignment-service.js';
 import type { AutomationTrigger, AutomationAction } from './types/entities.js';
 import { isRemoteMode, executeRemote } from './remote-client.js';
 
@@ -53,6 +58,11 @@ const workflowService = remote ? null! : new WorkflowService();
 const analysisService = remote ? null! : new AnalysisService();
 const automationService = remote ? null! : new AutomationService();
 const timeTrackingService = remote ? null! : new TimeTrackingService();
+const priorityRecommendationService = remote ? null! : new PriorityRecommendationService();
+const workloadService = remote ? null! : new WorkloadService();
+const templateService = remote ? null! : new TemplateService();
+const exportService = remote ? null! : new ExportService();
+const autoAssignmentService = remote ? null! : new AutoAssignmentService();
 
 // Create MCP server
 const server = new Server(
@@ -272,6 +282,31 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           project_id: { type: 'string', description: 'Project ID' },
         },
         required: ['project_id'],
+      },
+    },
+    // Export/Import tools
+    {
+      name: 'export_project',
+      description: 'Export complete project data (project, epics, tasks, dependencies, activities, test runs, fix attempts) in JSON or CSV format',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_id: { type: 'string', description: 'Project ID or code' },
+          format: { type: 'string', enum: ['json', 'csv'], description: 'Export format (json or csv)' },
+        },
+        required: ['project_id', 'format'],
+      },
+    },
+    {
+      name: 'import_project',
+      description: 'Import project data from exported JSON. Generates new UUIDs and preserves relationships. Use overwrite=true to replace existing project with same code.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          data: { type: 'object', description: 'Export data object from export_project' },
+          overwrite: { type: 'boolean', description: 'Overwrite if project code exists (default: false)' },
+        },
+        required: ['data'],
       },
     },
     // Test & Fix tools (Phase 3)
@@ -526,6 +561,121 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['action'],
       },
     },
+    // Priority recommendation tools
+    {
+      name: 'analyze_task_priority',
+      description: 'Analyze a task and suggest optimal priority based on blocking dependencies, dependent tasks, time tracking, epic completion rate, and current status. Returns score (0-100), suggested priority (1-5), reasons, and confidence level.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          task_id: { type: 'string', description: 'Task ID or ticket code (e.g., APS-1-3)' },
+        },
+        required: ['task_id'],
+      },
+    },
+    {
+      name: 'get_priority_suggestions',
+      description: 'Get AI-generated priority adjustment suggestions for all active tasks in a project. Analyzes dependencies, time spent, epic progress, and task status to recommend priority changes.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_id: { type: 'string', description: 'Project ID' },
+        },
+        required: ['project_id'],
+      },
+    },
+    {
+      name: 'get_workload_analysis',
+      description: 'Analyze workload distribution by assignee. Returns task count in progress, estimated hours, completion rates, and overload alerts.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_id: { type: 'string', description: 'Project ID' },
+        },
+        required: ['project_id'],
+      },
+    },
+    // Auto-assignment tools
+    {
+      name: 'suggest_assignee',
+      description: 'Suggest the most appropriate agent for a task based on task type, complexity, and keywords. Analyzes task description and recommends agent type (executor, designer, reviewer, etc.) with model tier (haiku/sonnet/opus).',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          task_id: { type: 'string', description: 'Task ID or ticket code (e.g., APS-1-3)' },
+        },
+        required: ['task_id'],
+      },
+    },
+    {
+      name: 'get_assignment_recommendations',
+      description: 'Get AI-generated assignee recommendations for all unassigned tasks in a project. Categorizes by agent type and provides confidence scores.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_id: { type: 'string', description: 'Project ID' },
+        },
+        required: ['project_id'],
+      },
+    },
+    // Template tools
+    {
+      name: 'create_task_template',
+      description: 'Create a reusable task template with optional subtasks. Useful for recurring task patterns.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_id: { type: 'string', description: 'Project ID' },
+          name: { type: 'string', description: 'Template name' },
+          description: { type: 'string', description: 'Template description' },
+          priority: { type: 'number', description: 'Default priority (1-5)' },
+          estimated_hrs: { type: 'number', description: 'Default estimated hours' },
+          subtasks: {
+            type: 'array',
+            description: 'Subtask templates',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                description: { type: 'string' },
+                priority: { type: 'number' },
+                estimated_hrs: { type: 'number' },
+              },
+              required: ['title'],
+            },
+          },
+        },
+        required: ['project_id', 'name'],
+      },
+    },
+    {
+      name: 'list_task_templates',
+      description: 'List all task templates for a project',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          project_id: { type: 'string', description: 'Project ID' },
+        },
+        required: ['project_id'],
+      },
+    },
+    {
+      name: 'apply_task_template',
+      description: 'Create a task from a template. Template defaults can be overridden.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          template_id: { type: 'string', description: 'Template ID' },
+          title: { type: 'string', description: 'Override task title (uses template name if omitted)' },
+          epic_id: { type: 'string', description: 'Epic to assign task to' },
+          description: { type: 'string', description: 'Override description' },
+          priority: { type: 'number', description: 'Override priority' },
+          estimated_hrs: { type: 'number', description: 'Override estimated hours' },
+          assignee: { type: 'string', description: 'Override assignee' },
+        },
+        required: ['template_id'],
+      },
+    },
   ],
 }));
 
@@ -646,6 +796,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case 'get_blocking_analysis': {
         result = await contextService.getBlockingAnalysis(args?.project_id as string);
+        break;
+      }
+      // Export/Import tools
+      case 'export_project': {
+        result = await exportService.exportProject(
+          args?.project_id as string,
+          args?.format as 'json' | 'csv',
+        );
+        break;
+      }
+      case 'import_project': {
+        result = await exportService.importProject(
+          args?.data as any,
+          { overwrite: args?.overwrite as boolean | undefined },
+        );
         break;
       }
       // Test & Fix tools (Phase 3)
@@ -820,6 +985,59 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           default:
             throw new Error(`알 수 없는 자동화 액션: ${automationAction}`);
         }
+        break;
+      }
+      // Priority recommendation tools
+      case 'analyze_task_priority': {
+        result = await priorityRecommendationService.analyzePriority(args?.task_id as string);
+        break;
+      }
+      case 'get_priority_suggestions': {
+        result = await priorityRecommendationService.suggestPriorityAdjustments(args?.project_id as string);
+        break;
+      }
+      // Workload analysis tools
+      case 'get_workload_analysis': {
+        result = await workloadService.getWorkloadByAssignee(args?.project_id as string);
+        break;
+      }
+      // Auto-assignment tools
+      case 'suggest_assignee': {
+        result = await autoAssignmentService.suggestAssignee(args?.task_id as string);
+        break;
+      }
+      case 'get_assignment_recommendations': {
+        result = await autoAssignmentService.assignRecommendations(args?.project_id as string);
+        break;
+      }
+      // Template tools
+      case 'create_task_template': {
+        result = await templateService.createTemplate({
+          project_id: args?.project_id as string,
+          name: args?.name as string,
+          description: args?.description as string | undefined,
+          priority: args?.priority as number | undefined,
+          estimated_hrs: args?.estimated_hrs as number | undefined,
+          subtasks: args?.subtasks as any[] | undefined,
+        });
+        break;
+      }
+      case 'list_task_templates': {
+        result = { templates: await templateService.getTemplates(args?.project_id as string) };
+        break;
+      }
+      case 'apply_task_template': {
+        result = await templateService.applyTemplate(
+          args?.template_id as string,
+          {
+            title: args?.title as string | undefined,
+            epic_id: args?.epic_id as string | undefined,
+            description: args?.description as string | undefined,
+            priority: args?.priority as number | undefined,
+            estimated_hrs: args?.estimated_hrs as number | undefined,
+            assignee: args?.assignee as string | undefined,
+          }
+        );
         break;
       }
       default:

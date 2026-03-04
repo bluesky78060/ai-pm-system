@@ -1,4 +1,5 @@
 import type { Task } from '../types/index.js';
+import { notificationSettingsService } from './notification-settings-service.js';
 
 interface SlackMessage {
   text: string;
@@ -63,6 +64,18 @@ export class NotificationService {
 
     if (!shouldNotify) return;
 
+    // 사용자 설정 확인 (기본 담당자는 'ai')
+    const userId = task.assignee || 'ai';
+    const eventType = newStatus === 'blocked' ? 'task_blocked' : 'status_change';
+    const settingsCheck = await notificationSettingsService.shouldNotify(userId, eventType, {
+      priority: task.priority,
+      assignee: task.assignee,
+      previousStatus,
+      newStatus,
+    });
+
+    if (!settingsCheck) return;
+
     let emoji = '📝';
     let title = '태스크 상태 변경';
 
@@ -126,6 +139,16 @@ export class NotificationService {
     const key = `stale_${task.id}_${daysInProgress}`;
     if (this.isDuplicate(key)) return;
 
+    // 사용자 설정 확인
+    const userId = task.assignee || 'ai';
+    const settingsCheck = await notificationSettingsService.shouldNotify(userId, 'task_stale', {
+      priority: task.priority,
+      assignee: task.assignee,
+      daysInProgress,
+    });
+
+    if (!settingsCheck) return;
+
     const message: SlackMessage = {
       text: `⏰ 지연된 태스크: ${task.title}`,
       blocks: [
@@ -158,6 +181,15 @@ export class NotificationService {
     const key = `pr_merged_${task.id}_${prUrl}`;
     if (this.isDuplicate(key)) return;
 
+    // 사용자 설정 확인
+    const userId = task.assignee || 'ai';
+    const settingsCheck = await notificationSettingsService.shouldNotify(userId, 'pr_merged', {
+      priority: task.priority,
+      assignee: task.assignee,
+    });
+
+    if (!settingsCheck) return;
+
     const message: SlackMessage = {
       text: `✅ PR 병합 완료: ${task.title}`,
       blocks: [
@@ -188,6 +220,15 @@ export class NotificationService {
 
     const key = `test_complete_${task.id}`;
     if (this.isDuplicate(key)) return;
+
+    // 사용자 설정 확인
+    const userId = task.assignee || 'ai';
+    const settingsCheck = await notificationSettingsService.shouldNotify(userId, 'test_complete', {
+      priority: task.priority,
+      assignee: task.assignee,
+    });
+
+    if (!settingsCheck) return;
 
     const fields: Array<{ type: string; text: string }> = [
       { type: 'mrkdwn', text: `*티켓:*\n${task.ticket_code || task.id}` },

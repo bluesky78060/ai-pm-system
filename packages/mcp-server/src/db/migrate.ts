@@ -130,6 +130,42 @@ CREATE TABLE IF NOT EXISTS time_entries (
 );
 CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_active ON time_entries(task_id, ended_at) WHERE ended_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS notification_settings (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL,
+  event_type   TEXT NOT NULL
+               CHECK(event_type IN ('status_change', 'task_blocked', 'task_stale', 'pr_merged', 'test_complete')),
+  enabled      BOOLEAN NOT NULL DEFAULT TRUE,
+  conditions   TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(user_id, event_type)
+);
+CREATE INDEX IF NOT EXISTS idx_notification_settings_user ON notification_settings(user_id);
+CREATE INDEX IF NOT EXISTS idx_notification_settings_event ON notification_settings(event_type);
+
+CREATE TABLE IF NOT EXISTS task_templates (
+  id            TEXT PRIMARY KEY,
+  project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  description   TEXT,
+  priority      INTEGER NOT NULL DEFAULT 3 CHECK(priority BETWEEN 1 AND 5),
+  estimated_hrs REAL,
+  subtasks      TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_task_templates_project ON task_templates(project_id);
+
+CREATE TABLE IF NOT EXISTS saved_searches (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  query       TEXT NOT NULL,
+  filters     TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON saved_searches(user_id);
 `;
 
 export async function runMigrations(): Promise<void> {

@@ -330,3 +330,197 @@ describe('TestService.reportTestResult', () => {
     await expect(testSvc.reportTestResult('nonexistent-id', 'pass')).rejects.toThrow(/태스크를 찾을 수 없습니다/);
   });
 });
+
+// ──────────────────────────────────────────────
+// WorkloadService.getWorkloadByAssignee
+// ──────────────────────────────────────────────
+describe('WorkloadService.getWorkloadByAssignee', () => {
+  it('returns empty analysis for project with no tasks', async () => {
+    const { projectId } = await createProjectAndEpic();
+    const WorkloadService = (await import('../services/workload-service.js')).WorkloadService;
+    const svc = new WorkloadService();
+
+    const result = await svc.getWorkloadByAssignee(projectId);
+
+    expect(result.project_id).toBe(projectId);
+    expect(result.total_active_tasks).toBe(0);
+    expect(result.all_assignees).toHaveLength(0);
+    expect(result.overloaded_assignees).toHaveLength(0);
+  });
+
+  it('calculates workload for a single assignee with in_progress tasks', async () => {
+    const { projectId, epicId } = await createProjectAndEpic();
+    const taskSvc = new TaskService();
+    const WorkloadService = (await import('../services/workload-service.js')).WorkloadService;
+    const workloadSvc = new WorkloadService();
+
+    // Create and start a task assigned to alice
+    const { task } = await taskSvc.create({
+      title: 'Task 1',
+      epic_id: epicId,
+      assignee: 'alice',
+      estimated_hrs: 5,
+    });
+    await taskSvc.updateStatus(task.id, 'in_progress');
+
+    const result = await workloadSvc.getWorkloadByAssignee(projectId);
+
+    expect(result.total_active_tasks).toBe(1);
+    expect(result.all_assignees).toHaveLength(1);
+    const alice = result.all_assignees[0];
+    expect(alice.assignee).toBe('alice');
+    expect(alice.in_progress_count).toBe(1);
+    expect(alice.estimated_hours_total).toBe(5);
+  });
+
+  it('groups tasks by assignee and calculates stats', async () => {
+    const { projectId, epicId } = await createProjectAndEpic();
+    const taskSvc = new TaskService();
+    const WorkloadService = (await import('../services/workload-service.js')).WorkloadService;
+    const workloadSvc = new WorkloadService();
+
+    // Create tasks for alice (2 in_progress, 1 done)
+    const task1 = await taskSvc.create({
+      title: 'Alice Task 1',
+      epic_id: epicId,
+      assignee: 'alice',
+      estimated_hrs: 4,
+    });
+    await taskSvc.updateStatus(task1.task.id, 'in_progress');
+
+    const task2 = await taskSvc.create({
+      title: 'Alice Task 2',
+      epic_id: epicId,
+      assignee: 'alice',
+      estimated_hrs: 3,
+    });
+    await taskSvc.updateStatus(task2.task.id, 'in_progress');
+
+    const task3 = await taskSvc.create({
+      title: 'Alice Task 3',
+      epic_id: epicId,
+      assignee: 'alice',
+      estimated_hrs: 2,
+    });
+    await taskSvc.updateStatus(task3.task.id, 'in_progress');
+    await taskSvc.updateStatus(task3.task.id, 'testing');
+    await taskSvc.updateStatus(task3.task.id, 'review');
+    await taskSvc.updateStatus(task3.task.id, 'done');
+
+    // Create task for bob (1 in_progress)
+    const task4 = await taskSvc.create({
+      title: 'Bob Task 1',
+      epic_id: epicId,
+      assignee: 'bob',
+      estimated_hrs: 6,
+    });
+    await taskSvc.updateStatus(task4.task.id, 'in_progress');
+
+    const result = await workloadSvc.getWorkloadByAssignee(projectId);
+
+    expect(result.total_active_tasks).toBe(3);
+    expect(result.all_assignees).toHaveLength(2);
+
+    // alice should be first (2 tasks, 7 hours)
+    const alice = result.all_assignees.find(a => a.assignee === 'alice');
+    expect(alice).toBeDefined();
+    expect(alice!.in_progress_count).toBe(2);
+    expect(alice!.estimated_hours_total).toBe(7);
+    expect(alice!.completed_count).toBe(1);
+    expect(alice!.completion_rate).toBeCloseTo(1 / 3, 2);
+
+    // bob should be second (1 task, 6 hours)
+    const bob = result.all_assignees.find(a => a.assignee === 'bob');
+    expect(bob).toBeDefined();
+    expect(bob!.in_progress_count).toBe(1);
+    expect(bob!.estimated_hours_total).toBe(6);
+    expect(bob!.completed_count).toBe(0);
+  });
+
+  it('detects overloaded assignees (task count)', async () => {
+    const { projectId, epicId } = await createProjectAndEpic();
+    const taskSvc = new TaskService();
+    const WorkloadService = (await import('../services/workload-service.js')).WorkloadService;
+    const workloadSvc = new WorkloadService();
+
+    // Create 4 in_progress tasks for alice (threshold is 3)
+    for (let i = 0; i < 4; i++) {
+      const task = await taskSvc.create({
+        title: `Alice Task ${i + 1}`,
+        epic_id: epicId,
+        assignee: 'alice',
+        estimated_hrs: 2,
+      });
+      await taskSvc.updateStatus(task.task.id, 'in_progress');
+    }
+
+    const result = await workloadSvc.getWorkloadByAssignee(projectId);
+
+    expect(result.overloaded_assignees).toHaveLength(1);
+    expect(result.overloaded_assignees[0].assignee).toBe('alice');
+  });
+
+  it('detects overloaded assignees (estimated hours)', async () => {
+    const { projectId, epicId } = await createProjectAndEpic();
+    const taskSvc = new TaskService();
+    const WorkloadService = (await import('../services/workload-service.js')).WorkloadService;
+    const workloadSvc = new WorkloadService();
+
+    // Create 2 tasks for bob with 15 hours each (threshold is 20)
+    for (let i = 0; i < 2; i++) {
+      const task = await taskSvc.create({
+        title: `Bob Task ${i + 1}`,
+        epic_id: epicId,
+        assignee: 'bob',
+        estimated_hrs: 15,
+      });
+      await taskSvc.updateStatus(task.task.id, 'in_progress');
+    }
+
+    const result = await workloadSvc.getWorkloadByAssignee(projectId);
+
+    expect(result.overloaded_assignees).toHaveLength(1);
+    expect(result.overloaded_assignees[0].assignee).toBe('bob');
+    expect(result.overloaded_assignees[0].estimated_hours_total).toBe(30);
+  });
+
+  it('calculates metrics correctly', async () => {
+    const { projectId, epicId } = await createProjectAndEpic();
+    const taskSvc = new TaskService();
+    const WorkloadService = (await import('../services/workload-service.js')).WorkloadService;
+    const workloadSvc = new WorkloadService();
+
+    // Create tasks: alice (2), bob (1), charlie (3)
+    for (let i = 0; i < 2; i++) {
+      const task = await taskSvc.create({
+        title: `Alice Task ${i + 1}`,
+        epic_id: epicId,
+        assignee: 'alice',
+      });
+      await taskSvc.updateStatus(task.task.id, 'in_progress');
+    }
+
+    const task = await taskSvc.create({
+      title: 'Bob Task 1',
+      epic_id: epicId,
+      assignee: 'bob',
+    });
+    await taskSvc.updateStatus(task.task.id, 'in_progress');
+
+    for (let i = 0; i < 3; i++) {
+      const t = await taskSvc.create({
+        title: `Charlie Task ${i + 1}`,
+        epic_id: epicId,
+        assignee: 'charlie',
+      });
+      await taskSvc.updateStatus(t.task.id, 'in_progress');
+    }
+
+    const result = await workloadSvc.getWorkloadByAssignee(projectId);
+
+    expect(result.metrics.max_workload).toBe(3);
+    expect(result.metrics.min_workload).toBe(1);
+    expect(result.metrics.avg_workload).toBeCloseTo(2, 1);
+    expect(result.metrics.overload_threshold).toBe(3);
+  });
+});

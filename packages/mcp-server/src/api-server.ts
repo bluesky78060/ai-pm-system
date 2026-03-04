@@ -13,6 +13,11 @@ import { WorkflowService } from './services/workflow-service.js';
 import { AnalysisService } from './services/analysis-service.js';
 import { AutomationService } from './services/automation-service.js';
 import { TimeTrackingService } from './services/time-tracking-service.js';
+import { PriorityRecommendationService } from './services/priority-recommendation-service.js';
+import { WorkloadService } from './services/workload-service.js';
+import { NotificationSettingsService } from './services/notification-settings-service.js';
+import { AutoAssignmentService } from './services/auto-assignment-service.js';
+import { SearchService } from './services/search-service.js';
 
 await runMigrations();
 
@@ -55,6 +60,11 @@ const workflowService = new WorkflowService();
 const analysisService = new AnalysisService();
 const automationService = new AutomationService();
 const timeTrackingService = new TimeTrackingService();
+const priorityRecommendationService = new PriorityRecommendationService();
+const workloadService = new WorkloadService();
+const notificationSettingsService = new NotificationSettingsService();
+const autoAssignmentService = new AutoAssignmentService();
+const searchService = new SearchService();
 
 const app = express();
 app.use(cors());
@@ -100,6 +110,14 @@ app.get('/api/projects/:id/context', wrapAsync(async (req) => contextService.get
 
 app.get('/api/projects/:id/blocking', wrapAsync(async (req) => contextService.getBlockingAnalysis(req.params.id as string)));
 
+app.get('/api/projects/:id/priority-suggestions', wrapAsync(async (req) =>
+  priorityRecommendationService.suggestPriorityAdjustments(req.params.id as string)
+));
+
+app.get('/api/projects/:id/assignment-recommendations', wrapAsync(async (req) =>
+  autoAssignmentService.assignRecommendations(req.params.id as string)
+));
+
 // === Epic routes ===
 app.post('/api/projects/:id/epics', wrapAsync(async (req) =>
   projectService.createEpic({ project_id: req.params.id as string, ...req.body })
@@ -117,6 +135,12 @@ app.get('/api/tasks', wrapAsync(async (req) => ({
 
 app.post('/api/tasks', wrapAsync(async (req) => taskService.create({ ...req.body, created_by: 'human' })));
 
+app.post('/api/tasks/search', wrapAsync(async (req) => {
+  const { query, filters } = req.body;
+  const tasks = await searchService.searchTasks(query || '', filters);
+  return { tasks };
+}));
+
 app.get('/api/tasks/:id', wrapAsync(async (req) => {
   const task = await taskService.getById(req.params.id as string);
   if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${req.params.id as string}`);
@@ -130,6 +154,14 @@ app.patch('/api/tasks/:id/status', wrapAsync(async (req) =>
 
 app.patch('/api/tasks/:id/priority', wrapAsync(async (req) =>
   taskService.setPriority(req.params.id as string, req.body.priority, req.body.reason)
+));
+
+app.get('/api/tasks/:id/priority-analysis', wrapAsync(async (req) =>
+  priorityRecommendationService.analyzePriority(req.params.id as string)
+));
+
+app.get('/api/tasks/:id/assignee-suggestion', wrapAsync(async (req) =>
+  autoAssignmentService.suggestAssignee(req.params.id as string)
 ));
 
 app.patch('/api/tasks/:id', wrapAsync(async (req) => {
@@ -187,6 +219,23 @@ app.post('/api/tasks/:id/link-pr', wrapAsync(async (req) =>
 app.get('/api/tasks/:id/pr-status', wrapAsync((req) =>
   githubService.getPrStatus(req.params.id as string)
 ));
+
+// === Saved Search routes ===
+app.post('/api/saved-searches', wrapAsync(async (req) => {
+  const { user_id, name, query, filters } = req.body;
+  return await searchService.saveSearch(user_id, name, query, filters);
+}));
+
+app.get('/api/saved-searches', wrapAsync(async (req) => {
+  const userId = req.query.user_id as string;
+  if (!userId) throw new Error('user_id는 필수입니다');
+  return { saved_searches: await searchService.getSavedSearches(userId) };
+}));
+
+app.delete('/api/saved-searches/:id', wrapAsync(async (req) => {
+  await searchService.deleteSavedSearch(req.params.id as string);
+  return { message: '저장된 검색이 삭제되었습니다' };
+}));
 
 // === Activity routes ===
 app.get('/api/activities', wrapAsync(async (req) => {
@@ -250,6 +299,15 @@ app.get('/api/projects/:id/analysis/:type', wrapAsync(async (req) => {
   }
 }));
 
+// === Workload routes ===
+app.get('/api/projects/:id/workload', wrapAsync(async (req) =>
+  workloadService.getWorkloadByAssignee(req.params.id as string)
+));
+
+app.get('/api/projects/:id/workload/alerts', wrapAsync(async (req) =>
+  workloadService.getOverloadAlerts(req.params.id as string)
+));
+
 // === Automation routes ===
 app.get('/api/projects/:id/automation', wrapAsync(async (req) => ({
   rules: await automationService.listRules(req.params.id as string),
@@ -274,6 +332,47 @@ app.delete('/api/automation/:ruleId', wrapAsync(async (req) => {
 app.patch('/api/automation/:ruleId/toggle', wrapAsync(async (req) =>
   automationService.toggleRule(req.params.ruleId as string)
 ));
+
+// === Notification Settings routes ===
+app.get('/api/notification-settings', wrapAsync(async (req) => {
+  const userId = req.query.user_id as string || 'ai';
+  const settings = await notificationSettingsService.getSettings(userId);
+  return { settings };
+}));
+
+app.get('/api/notification-settings/:eventType', wrapAsync(async (req) => {
+  const userId = req.query.user_id as string || 'ai';
+  const eventType = req.params.eventType as string;
+  const setting = await notificationSettingsService.getSetting(userId, eventType);
+  if (!setting) {
+    throw new Error(`알림 설정을 찾을 수 없습니다: ${eventType}`);
+  }
+  return { setting };
+}));
+
+app.patch('/api/notification-settings/:eventType', wrapAsync(async (req) => {
+  const userId = req.query.user_id as string || 'ai';
+  const eventType = req.params.eventType as string;
+  const { enabled, conditions } = req.body;
+
+  if (enabled === undefined) {
+    throw new Error('enabled 필드는 필수입니다');
+  }
+
+  const setting = await notificationSettingsService.updateSetting(
+    userId,
+    eventType,
+    enabled,
+    conditions
+  );
+  return { setting };
+}));
+
+app.post('/api/notification-settings/initialize', wrapAsync(async (req) => {
+  const userId = req.query.user_id as string || 'ai';
+  await notificationSettingsService.initializeDefaults(userId);
+  return { message: `사용자 ${userId}의 알림 설정이 초기화되었습니다` };
+}));
 
 // === Seed demo activities for a task ===
 app.post('/api/tasks/:id/seed-activities', wrapAsync(async (req) => {

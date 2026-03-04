@@ -121,6 +121,16 @@ export const api = {
   updateTaskStatus: (id: string, status: string, notes?: string) =>
     request<{ task: Task }>(`/tasks/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, notes }) }),
   getFixHistory: (taskId: string) => request<{ testRuns: any[]; fixAttempts: any[]; summary: any }>(`/tasks/${taskId}/fix-history`),
+  searchTasks: (query: string, filters?: { status?: string[]; assignee?: string[]; epic_id?: string[]; priority?: number[]; date_range?: { start: string; end: string } }) =>
+    request<{ tasks: Task[] }>('/tasks/search', { method: 'POST', body: JSON.stringify({ query, filters }) }),
+
+  // Saved Searches
+  saveSear: (userId: string, name: string, query: string, filters?: any) =>
+    request<{ id: string; user_id: string; name: string; query: string; filters?: any; created_at: string }>('/saved-searches', { method: 'POST', body: JSON.stringify({ user_id: userId, name, query, filters }) }),
+  getSavedSearches: (userId: string) =>
+    request<{ saved_searches: { id: string; user_id: string; name: string; query: string; filters?: any; created_at: string }[] }>(`/saved-searches?user_id=${userId}`),
+  deleteSavedSearch: (id: string) =>
+    request<{ message: string }>(`/saved-searches/${id}`, { method: 'DELETE' }),
 
   // Activities
   listActivities: (params?: Record<string, string>) => {

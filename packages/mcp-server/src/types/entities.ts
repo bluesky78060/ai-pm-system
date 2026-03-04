@@ -116,3 +116,23 @@ export interface AutomationRule {
   enabled: boolean;
   created_at: string;
 }
+
+export interface ExportData {
+  exportedAt: string;
+  format: 'json' | 'csv';
+  project: Project;
+  epics: Epic[];
+  tasks: Task[];
+  dependencies: TaskDependency[];
+  activities: ActivityLog[];
+  testRuns: TestRun[];
+  fixAttempts: FixAttempt[];
+}
+
+export interface ImportResult {
+  projectId: string;
+  projectCode: string;
+  epicCount: number;
+  taskCount: number;
+  activityCount: number;
+}
