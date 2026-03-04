@@ -4,10 +4,12 @@ import { ActivityRepository } from '../db/repositories/activity-repo.js';
 import { UUID_REGEX } from '../utils/code-gen.js';
 import type { Task, TaskStatus } from '../types/index.js';
 import { notificationService } from './notification-service.js';
+import { TimeTrackingService } from './time-tracking-service.js';
 
 const taskRepo = new TaskRepository();
 const epicRepo = new EpicRepository();
 const activityRepo = new ActivityRepository();
+const timeTrackingService = new TimeTrackingService();
 
 async function resolveTask(idOrCode: string): Promise<Task> {
   let task: Task | undefined;
@@ -157,6 +159,18 @@ export class TaskService {
     }
 
     const previousStatus = task.status;
+
+    // Time tracking integration
+    // Stop tracking when leaving in_progress, testing, fixing, review, or blocked
+    if (['in_progress', 'testing', 'fixing', 'review', 'blocked'].includes(previousStatus)) {
+      await timeTrackingService.stopTracking(taskId);
+    }
+
+    // Start tracking when entering in_progress, testing, fixing, review, or blocked
+    if (['in_progress', 'testing', 'fixing', 'review', 'blocked'].includes(newStatus)) {
+      await timeTrackingService.startTracking(taskId, newStatus, notes);
+    }
+
     const updated = await taskRepo.updateStatus(taskId, newStatus, notes);
 
     // 소요 시간 계산

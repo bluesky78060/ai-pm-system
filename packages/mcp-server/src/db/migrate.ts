@@ -117,6 +117,19 @@ CREATE TABLE IF NOT EXISTS automation_rules (
 );
 CREATE INDEX IF NOT EXISTS idx_automation_rules_project ON automation_rules(project_id);
 CREATE INDEX IF NOT EXISTS idx_automation_rules_trigger ON automation_rules(trigger_event);
+
+CREATE TABLE IF NOT EXISTS time_entries (
+  id               TEXT PRIMARY KEY,
+  task_id          TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  status           TEXT NOT NULL
+                   CHECK(status IN ('in_progress', 'testing', 'fixing', 'review', 'blocked')),
+  started_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ended_at         TIMESTAMPTZ,
+  duration_seconds INTEGER,
+  notes            TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
+CREATE INDEX IF NOT EXISTS idx_time_entries_active ON time_entries(task_id, ended_at) WHERE ended_at IS NULL;
 `;
 
 export async function runMigrations(): Promise<void> {

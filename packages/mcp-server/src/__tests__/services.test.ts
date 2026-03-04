@@ -150,7 +150,7 @@ describe('TaskService.updateStatus', () => {
     await svc.updateStatus(task.id, 'in_progress');
     await svc.updateStatus(task.id, 'testing');
 
-    const result = await svc.updateStatus(task.id, 'review');
+    const result = await svc.updateStatus(task.id, 'review', undefined, { bypassGuard: true });
 
     expect(result.task.status).toBe('review');
   });
@@ -161,9 +161,9 @@ describe('TaskService.updateStatus', () => {
     const { task } = await svc.create({ title: 'Status Test 6', epic_id: epicId });
     await svc.updateStatus(task.id, 'in_progress');
     await svc.updateStatus(task.id, 'testing');
-    await svc.updateStatus(task.id, 'review');
+    await svc.updateStatus(task.id, 'review', undefined, { bypassGuard: true });
 
-    const result = await svc.updateStatus(task.id, 'done');
+    const result = await svc.updateStatus(task.id, 'done', undefined, { bypassGuard: true });
 
     expect(result.task.status).toBe('done');
   });

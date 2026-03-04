@@ -11,6 +11,7 @@ import { ActivityRepository } from './db/repositories/activity-repo.js';
 import { WorkflowService } from './services/workflow-service.js';
 import { AnalysisService } from './services/analysis-service.js';
 import { AutomationService } from './services/automation-service.js';
+import { TimeTrackingService } from './services/time-tracking-service.js';
 import type { AutomationTrigger, AutomationAction } from './types/entities.js';
 import { isRemoteMode, executeRemote } from './remote-client.js';
 
@@ -51,6 +52,7 @@ const activityRepo = remote ? null! : new ActivityRepository();
 const workflowService = remote ? null! : new WorkflowService();
 const analysisService = remote ? null! : new AnalysisService();
 const automationService = remote ? null! : new AutomationService();
+const timeTrackingService = remote ? null! : new TimeTrackingService();
 
 // Create MCP server
 const server = new Server(
@@ -454,6 +456,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['project_id'],
       },
     },
+    {
+      name: 'get_task_time_summary',
+      description: 'Get comprehensive time tracking summary for a task, including total time spent and breakdown by status.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          task_id: { type: 'string', description: 'Task ID or ticket code' },
+        },
+        required: ['task_id'],
+      },
+    },
     // Subagent tools
     {
       name: 'smart_workflow',
@@ -723,6 +736,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           allActivities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
           result = { activities: allActivities.slice(0, projLimit) };
         }
+        break;
+      }
+      case 'get_task_time_summary': {
+        const taskId = args?.task_id as string;
+        if (!taskId) throw new Error('task_id가 필요합니다');
+        const task = await taskService.getById(taskId);
+        if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+        result = await timeTrackingService.getTimeSummary(task.id);
         break;
       }
       // Subagent tools

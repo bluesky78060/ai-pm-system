@@ -12,6 +12,7 @@ import { ActivityRepository } from './db/repositories/activity-repo.js';
 import { WorkflowService } from './services/workflow-service.js';
 import { AnalysisService } from './services/analysis-service.js';
 import { AutomationService } from './services/automation-service.js';
+import { TimeTrackingService } from './services/time-tracking-service.js';
 
 await runMigrations();
 
@@ -53,6 +54,7 @@ const activityRepo = new ActivityRepository();
 const workflowService = new WorkflowService();
 const analysisService = new AnalysisService();
 const automationService = new AutomationService();
+const timeTrackingService = new TimeTrackingService();
 
 const app = express();
 app.use(cors());
@@ -163,6 +165,19 @@ app.post('/api/tasks/:id/test-runs', wrapAsync(async (req) =>
 app.post('/api/tasks/:id/test-result', wrapAsync(async (req) =>
   testService.reportTestResult(req.params.id as string, req.body.result, req.body.failures)
 ));
+
+// === Time tracking routes ===
+app.get('/api/tasks/:id/time-entries', wrapAsync(async (req) => {
+  const task = await taskService.getById(req.params.id as string);
+  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${req.params.id}`);
+  return { time_entries: await timeTrackingService.getTimeEntries(task.id) };
+}));
+
+app.get('/api/tasks/:id/time-summary', wrapAsync(async (req) => {
+  const task = await taskService.getById(req.params.id as string);
+  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${req.params.id}`);
+  return { summary: await timeTrackingService.getTimeSummary(task.id) };
+}));
 
 // === GitHub routes ===
 app.post('/api/tasks/:id/link-pr', wrapAsync(async (req) =>
