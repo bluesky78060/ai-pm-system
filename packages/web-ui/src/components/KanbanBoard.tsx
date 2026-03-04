@@ -1,5 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { Task, Epic } from '../api';
+import { api } from '../api';
 import TaskCard, { EPIC_COLOR_PALETTE, type EpicColorInfo } from './TaskCard';
 import TaskModal from './TaskModal';
 
@@ -28,6 +40,15 @@ const COLUMNS: ColumnDef[] = [
   { key: 'done',        statuses: ['done', 'blocked'],    label: 'Done',        color: '#22c55e', group: 'COMPLETE', groupStart: true,  groupEnd: true },
 ];
 
+// Map column keys to status values for API calls
+const COLUMN_TO_STATUS: Record<string, string> = {
+  'todo': 'todo',
+  'in_progress': 'in_progress',
+  'verifying': 'testing', // verifying column maps to 'testing' status
+  'review': 'review',
+  'done': 'done',
+};
+
 function hexToRgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -37,9 +58,73 @@ function hexToRgba(hex: string, alpha: number): string {
 
 export default function KanbanBoard({ tasks, epics }: KanbanBoardProps) {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [localTasks, setLocalTasks] = useState<Task[]>(tasks);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+
   const epicMap = new Map(epics.map((e, i) => [e.id, { title: e.title, color: EPIC_COLOR_PALETTE[i % EPIC_COLOR_PALETTE.length] }]));
 
-  const tasksByStatus = tasks.reduce<Record<string, Task[]>>((acc, task) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  // Update local tasks when props change
+  useEffect(() => {
+    setLocalTasks(tasks);
+  }, [tasks]);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over) return;
+
+    const taskId = active.id as string;
+    const overId = over.id as string;
+
+    // Find which column the task was dropped into
+    const targetColumn = COLUMNS.find((col) =>
+      overId === col.key || localTasks.some((t) => t.id === overId && col.statuses.includes(t.status as StatusKey))
+    );
+
+    if (!targetColumn) return;
+
+    const task = localTasks.find((t) => t.id === taskId);
+    if (!task) return;
+
+    // Check if task is already in the target column
+    if (targetColumn.statuses.includes(task.status as StatusKey)) return;
+
+    const newStatus = COLUMN_TO_STATUS[targetColumn.key];
+    if (!newStatus) return;
+
+    // Optimistic update
+    setLocalTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
+    );
+
+    setIsUpdating(true);
+
+    try {
+      await api.updateTaskStatus(taskId, newStatus);
+    } catch (error) {
+      // Rollback on error
+      setLocalTasks(tasks);
+      alert(`Failed to update task: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const tasksByStatus = localTasks.reduce<Record<string, Task[]>>((acc, task) => {
     const status = task.status || 'todo';
     if (!acc[status]) acc[status] = [];
     acc[status].push(task);
@@ -63,10 +148,28 @@ export default function KanbanBoard({ tasks, epics }: KanbanBoardProps) {
     }
   }
 
+  const activeTask = activeId ? localTasks.find((t) => t.id === activeId) : null;
+  const activeEpic = activeTask?.epic_id ? epicMap.get(activeTask.epic_id) : undefined;
+
   return (
-    <div className="h-[calc(100vh-220px)] overflow-x-auto">
-      {/* Group labels row */}
-      <div className="flex gap-0 mb-1">
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="h-[calc(100vh-220px)] overflow-x-auto relative">
+        {isUpdating && (
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 shadow-lg z-50">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-slate-300">Updating task...</span>
+            </div>
+          </div>
+        )}
+
+        {/* Group labels row */}
+        <div className="flex gap-0 mb-1">
         {COLUMNS.map((col, i) => (
           <div key={col.key} className="flex-1 min-w-[160px] flex items-center">
             {col.groupStart && (
@@ -120,25 +223,44 @@ export default function KanbanBoard({ tasks, epics }: KanbanBoardProps) {
                 </div>
 
                 {/* Cards */}
-                <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-                  {colTasks.map((task) => {
-                    const epic = task.epic_id ? epicMap.get(task.epic_id) : undefined;
-                    return (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        epicTitle={epic?.title}
-                        epicColor={epic?.color}
-                        onClick={setSelectedTaskId}
-                      />
-                    );
-                  })}
-                  {colTasks.length === 0 && (
-                    <div className="text-center text-[11px] text-slate-600 py-8">
-                      No tasks
-                    </div>
-                  )}
-                </div>
+                <SortableContext
+                  items={colTasks.map((t) => t.id)}
+                  strategy={verticalListSortingStrategy}
+                  id={col.key}
+                >
+                  <div
+                    className={`flex-1 overflow-y-auto space-y-3 pr-1 rounded-lg transition-all ${
+                      activeId && !col.statuses.includes(
+                        localTasks.find((t) => t.id === activeId)?.status as StatusKey || 'todo'
+                      )
+                        ? 'ring-2 ring-offset-2 ring-offset-slate-900'
+                        : ''
+                    }`}
+                    style={{
+                      borderColor: activeId && !col.statuses.includes(
+                        localTasks.find((t) => t.id === activeId)?.status as StatusKey || 'todo'
+                      ) ? col.color : 'transparent',
+                    }}
+                  >
+                    {colTasks.map((task) => {
+                      const epic = task.epic_id ? epicMap.get(task.epic_id) : undefined;
+                      return (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          epicTitle={epic?.title}
+                          epicColor={epic?.color}
+                          onClick={setSelectedTaskId}
+                        />
+                      );
+                    })}
+                    {colTasks.length === 0 && (
+                      <div className="text-center text-[11px] text-slate-600 py-8">
+                        No tasks
+                      </div>
+                    )}
+                  </div>
+                </SortableContext>
               </div>
 
               {/* Group divider */}
@@ -150,10 +272,24 @@ export default function KanbanBoard({ tasks, epics }: KanbanBoardProps) {
         })}
       </div>
 
-      {/* Task Detail Modal */}
-      {selectedTaskId && (
-        <TaskModal taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
-      )}
-    </div>
+        {/* Task Detail Modal */}
+        {selectedTaskId && (
+          <TaskModal taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+        )}
+      </div>
+
+      {/* Drag Overlay */}
+      <DragOverlay>
+        {activeId && activeTask ? (
+          <div className="transform rotate-3">
+            <TaskCard
+              task={activeTask}
+              epicTitle={activeEpic?.title}
+              epicColor={activeEpic?.color}
+            />
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

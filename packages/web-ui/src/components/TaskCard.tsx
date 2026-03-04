@@ -1,3 +1,5 @@
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { Task } from '../api';
 
 const PRIORITY_CONFIG: Record<number, { label: string; bg: string; text: string }> = {
@@ -46,6 +48,15 @@ interface TaskCardProps {
 }
 
 export default function TaskCard({ task, epicTitle, epicColor, subtaskInfo, onClick }: TaskCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
   const priority = PRIORITY_CONFIG[task.priority] ?? PRIORITY_CONFIG[3];
   const stripeColor = STATUS_STRIPE[task.status] ?? '#334155';
   const isDone = task.status === 'done';
@@ -59,21 +70,34 @@ export default function TaskCard({ task, epicTitle, epicColor, subtaskInfo, onCl
     ? epicColor.bg.replace('0.15', '0.12')
     : undefined;
 
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    backgroundColor: cardBg ?? '#1A1D2E',
+    borderColor: epicColor ? epicColor.dot + '20' : '#2e3348',
+    cursor: isDragging ? 'grabbing' : 'grab',
+  };
+
   return (
     <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
       onClick={() => onClick?.(task.id)}
-      className={`relative block rounded-lg border overflow-hidden transition-all cursor-pointer ${isDone ? 'opacity-65' : ''}`}
-      style={{
-        backgroundColor: cardBg ?? '#1A1D2E',
-        borderColor: epicColor ? epicColor.dot + '20' : '#2e3348',
-      }}
+      className={`relative block rounded-lg border overflow-hidden transition-all ${isDone ? 'opacity-65' : ''} ${isDragging ? 'shadow-2xl scale-105 z-50' : ''}`}
       onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = cardHoverBg ?? '#1E2135';
-        e.currentTarget.style.borderColor = epicColor ? epicColor.dot + '40' : '#3d4463';
+        if (!isDragging) {
+          e.currentTarget.style.backgroundColor = cardHoverBg ?? '#1E2135';
+          e.currentTarget.style.borderColor = epicColor ? epicColor.dot + '40' : '#3d4463';
+        }
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = cardBg ?? '#1A1D2E';
-        e.currentTarget.style.borderColor = epicColor ? epicColor.dot + '20' : '#2e3348';
+        if (!isDragging) {
+          e.currentTarget.style.backgroundColor = cardBg ?? '#1A1D2E';
+          e.currentTarget.style.borderColor = epicColor ? epicColor.dot + '20' : '#2e3348';
+        }
       }}
     >
       {/* 상태별 왼쪽 스트라이프 */}
