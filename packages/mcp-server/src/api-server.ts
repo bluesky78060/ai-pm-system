@@ -195,14 +195,33 @@ app.get('/api/projects/:id/activities', wrapAsync(async (req) => {
 
 // === Workflow routes ===
 app.post('/api/workflow/:taskId', wrapAsync(async (req) => {
-  const { action, test_results, notes } = req.body;
+  const { action, test_results, notes, issues } = req.body;
+  const taskId = req.params.taskId as string;
+  let result;
   switch (action) {
-    case 'start_work': return workflowService.startWork(req.params.taskId as string);
-    case 'submit_test': return workflowService.submitTest(req.params.taskId as string, test_results);
-    case 'complete_fix': return workflowService.completeFix(req.params.taskId as string, notes);
-    case 'approve_review': return workflowService.approveReview(req.params.taskId as string, notes);
-    default: throw new Error(`알 수 없는 워크플로우 액션: ${action}`);
+    case 'start_work':
+      result = await workflowService.startWork(taskId);
+      break;
+    case 'submit_test':
+      result = await workflowService.submitTest(taskId, test_results);
+      break;
+    case 'complete_fix':
+      result = await workflowService.completeFix(taskId, notes);
+      break;
+    case 'approve_review':
+      result = await workflowService.approveReview(taskId, notes);
+      break;
+    case 'request_changes': {
+      if (!issues || typeof issues !== 'string') {
+        throw new Error('issues 필드가 필요합니다 (20자 이상)');
+      }
+      result = await workflowService.requestChanges(taskId, issues);
+      break;
+    }
+    default:
+      throw new Error(`알 수 없는 워크플로우 액션: ${action}`);
   }
+  return result;
 }));
 
 // === Analysis routes ===

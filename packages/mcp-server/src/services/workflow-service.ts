@@ -293,4 +293,50 @@ export class WorkflowService {
       message: `'${task.title}' 리뷰 승인 완료. 상태: done${epicProgress ? ` (에픽 진행률: ${epicProgress.rate}%)` : ''}`,
     };
   }
+
+  /**
+   * requestChanges: 코드 리뷰에서 수정 요청 시 in_progress로 백트랙합니다.
+   * review → in_progress 전환
+   */
+  async requestChanges(
+    taskId: string,
+    issues: string,
+  ): Promise<{
+    task: Task;
+    message: string;
+  }> {
+    // 이슈 내용 검증
+    if (!issues || issues.trim().length < 20) {
+      throw new Error('이슈 내용(issues)을 20자 이상 작성해야 합니다. 발견된 문제점을 구체적으로 설명하세요.');
+    }
+
+    const found = await this.taskService.getById(taskId);
+    if (!found) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+
+    if (found.status !== 'review') {
+      throw new Error(`review 상태의 태스크만 수정 요청할 수 있습니다. 현재 상태: ${found.status}`);
+    }
+
+    let task: Task;
+    try {
+      const result = await this.taskService.updateStatus(found.id, 'in_progress', `코드 리뷰 수정 요청: ${issues}`);
+      task = result.task;
+    } catch (e) {
+      throw new Error(`in_progress 상태 전환 실패 (${found.ticket_code ?? found.id}): ${(e as Error).message}`);
+    }
+
+    await this.activityRepo.create({
+      task_id: task.id,
+      actor: 'ai',
+      action: 'workflow_review_changes_requested',
+      payload: {
+        issues,
+      },
+    });
+
+    return {
+      task,
+      message: `'${task.title}' 코드 리뷰에서 수정 요청됨. 상태: in_progress`,
+    };
+  }
 }

@@ -457,12 +457,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     // Subagent tools
     {
       name: 'smart_workflow',
-      description: 'Execute compound workflow actions. testing→review and review→done transitions are ONLY allowed through this tool.\n\nAgent routing per action:\n- start_work: Parallel OK. After transition, delegate to executor(sonnet)/executor-high(opus)/designer(sonnet) based on complexity.\n- submit_test: Run pnpm -r build FIRST. Use build-fixer(sonnet) if fails. Include REAL output (10+ chars).\n- approve_review: Run code-reviewer(opus) or /code-review skill FIRST. Include REAL review findings (20+ chars).\n- complete_fix: Use build-fixer or executor to fix, then re-test.\n\nSkills: /autopilot(auto), /ultrawork(parallel), /ecomode(budget), /build-fix(errors), /ultraqa(test-loop), /code-review, /security-review.',
+      description: 'Execute compound workflow actions. testing→review and review→done transitions are ONLY allowed through this tool.\n\nAgent routing per action:\n- start_work: Parallel OK. After transition, delegate to executor(sonnet)/executor-high(opus)/designer(sonnet) based on complexity.\n- submit_test: Run pnpm -r build FIRST. Use build-fixer(sonnet) if fails. Include REAL output (10+ chars).\n- approve_review: Run code-reviewer(opus) or /code-review skill FIRST. Include REAL review findings (20+ chars).\n- request_changes: Use when code review finds issues. Requires issues description (20+ chars). Backtracks review→in_progress.\n- complete_fix: Use build-fixer or executor to fix, then re-test.\n\nSkills: /autopilot(auto), /ultrawork(parallel), /ecomode(budget), /build-fix(errors), /ultraqa(test-loop), /code-review, /security-review.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           task_id: { type: 'string', description: 'Task ID or ticket code' },
-          action: { type: 'string', enum: ['start_work', 'submit_test', 'complete_fix', 'approve_review'], description: 'start_work: todo→in_progress. submit_test: requires real build/test results with output. complete_fix: fixing→testing. approve_review: requires real code review notes.' },
+          action: { type: 'string', enum: ['start_work', 'submit_test', 'complete_fix', 'approve_review', 'request_changes'], description: 'start_work: todo→in_progress. submit_test: requires real build/test results with output. complete_fix: fixing→testing. approve_review: requires real code review notes. request_changes: review→in_progress (code review issues found).' },
           test_results: {
             type: 'array', description: 'REQUIRED for submit_test. Must include build result with real output (10+ chars). Run pnpm -r build and include the output.',
             items: {
@@ -478,6 +478,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             },
           },
           notes: { type: 'string', description: 'REQUIRED for approve_review (20+ chars). Include actual code review findings from code-reviewer agent.' },
+          issues: { type: 'string', description: 'REQUIRED for request_changes (20+ chars). Describe code review issues found.' },
         },
         required: ['task_id', 'action'],
       },
@@ -743,6 +744,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           case 'approve_review':
             result = await workflowService.approveReview(args?.task_id as string, args?.notes as string | undefined);
             break;
+          case 'request_changes': {
+            if (!args?.issues || typeof args.issues !== 'string') {
+              throw new Error('issues 매개변수가 필요합니다 (20자 이상 리뷰 이슈 설명)');
+            }
+            result = await workflowService.requestChanges(args.task_id as string, args.issues);
+            break;
+          }
           default:
             throw new Error(`알 수 없는 워크플로우 액션: ${action}`);
         }
