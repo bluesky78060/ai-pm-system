@@ -18,6 +18,8 @@ import { WorkloadService } from './services/workload-service.js';
 import { NotificationSettingsService } from './services/notification-settings-service.js';
 import { AutoAssignmentService } from './services/auto-assignment-service.js';
 import { SearchService } from './services/search-service.js';
+import { TemplateService } from './services/template-service.js';
+import { ExportService } from './services/export-service.js';
 
 await runMigrations();
 
@@ -65,6 +67,8 @@ const workloadService = new WorkloadService();
 const notificationSettingsService = new NotificationSettingsService();
 const autoAssignmentService = new AutoAssignmentService();
 const searchService = new SearchService();
+const templateService = new TemplateService();
+const exportService = new ExportService();
 
 const app = express();
 app.use(cors());
@@ -198,6 +202,14 @@ app.post('/api/tasks/:id/test-result', wrapAsync(async (req) =>
   testService.reportTestResult(req.params.id as string, req.body.result, req.body.failures)
 ));
 
+app.post('/api/tasks/:id/fix', wrapAsync(async (req) =>
+  testService.createFixTask(req.params.id as string, req.body.issue_description, req.body.files_changed)
+));
+
+app.post('/api/tasks/:id/escalate', wrapAsync(async (req) =>
+  testService.escalateToHuman(req.params.id as string, req.body.reason)
+));
+
 // === Time tracking routes ===
 app.get('/api/tasks/:id/time-entries', wrapAsync(async (req) => {
   const task = await taskService.getById(req.params.id as string);
@@ -218,6 +230,22 @@ app.post('/api/tasks/:id/link-pr', wrapAsync(async (req) =>
 
 app.get('/api/tasks/:id/pr-status', wrapAsync((req) =>
   githubService.getPrStatus(req.params.id as string)
+));
+
+app.post('/api/tasks/:id/github-issue', wrapAsync(async (req) =>
+  githubService.createGithubIssue(req.params.id as string, req.body.project_id, req.body.labels)
+));
+
+app.post('/api/tasks/:id/sync-commit', wrapAsync(async (req) =>
+  githubService.syncCommitProgress(
+    req.params.id as string,
+    req.body.commit_hash,
+    req.body.notes,
+    req.body.message,
+    req.body.files_changed,
+    req.body.additions,
+    req.body.deletions,
+  )
 ));
 
 // === Saved Search routes ===
@@ -287,6 +315,15 @@ app.post('/api/workflow/:taskId', wrapAsync(async (req) => {
   }
   return result;
 }));
+
+// === Export/Import routes ===
+app.get('/api/projects/:id/export', wrapAsync(async (req) =>
+  exportService.exportProject(req.params.id as string, (req.query.format as 'json' | 'csv') || 'json')
+));
+
+app.post('/api/projects/import', wrapAsync(async (req) =>
+  exportService.importProject(req.body.data, { overwrite: req.body.overwrite })
+));
 
 // === Analysis routes ===
 app.get('/api/projects/:id/analysis/:type', wrapAsync(async (req) => {
@@ -373,6 +410,19 @@ app.post('/api/notification-settings/initialize', wrapAsync(async (req) => {
   await notificationSettingsService.initializeDefaults(userId);
   return { message: `사용자 ${userId}의 알림 설정이 초기화되었습니다` };
 }));
+
+// === Template routes ===
+app.get('/api/projects/:id/templates', wrapAsync(async (req) =>
+  ({ templates: await templateService.getTemplates(req.params.id as string) })
+));
+
+app.post('/api/projects/:id/templates', wrapAsync(async (req) =>
+  templateService.createTemplate({ project_id: req.params.id as string, ...req.body })
+));
+
+app.post('/api/templates/:id/apply', wrapAsync(async (req) =>
+  templateService.applyTemplate(req.params.id as string, req.body)
+));
 
 // === Seed demo activities for a task ===
 app.post('/api/tasks/:id/seed-activities', wrapAsync(async (req) => {

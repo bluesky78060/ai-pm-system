@@ -130,7 +130,14 @@ export async function executeRemote(toolName: string, args: Record<string, unkno
     case 'create_github_issue':
       return post(`/api/tasks/${args.task_id}/github-issue`, { project_id: args.project_id, labels: args.labels });
     case 'sync_commit_progress':
-      return post(`/api/tasks/${args.task_id}/sync-commit`, { commit_hash: args.commit_hash, notes: args.notes });
+      return post(`/api/tasks/${args.task_id}/sync-commit`, {
+        commit_hash: args.commit_hash,
+        notes: args.notes,
+        message: args.message,
+        files_changed: args.files_changed,
+        additions: args.additions,
+        deletions: args.deletions,
+      });
 
     // === Activity ===
     case 'get_task_activities': {
@@ -148,6 +155,50 @@ export async function executeRemote(toolName: string, args: Record<string, unkno
         action: args.action,
         test_results: args.test_results,
         notes: args.notes,
+        issues: args.issues,
+      });
+
+    // === Time & Priority ===
+    case 'get_task_time_summary':
+      return get(`/api/tasks/${args.task_id}/time-summary`);
+    case 'analyze_task_priority':
+      return get(`/api/tasks/${args.task_id}/priority-analysis`);
+    case 'get_priority_suggestions':
+      return get(`/api/projects/${args.project_id}/priority-suggestions`);
+    case 'get_workload_analysis':
+      return get(`/api/projects/${args.project_id}/workload`);
+
+    // === Assignee ===
+    case 'suggest_assignee':
+      return get(`/api/tasks/${args.task_id}/assignee-suggestion`);
+    case 'get_assignment_recommendations':
+      return get(`/api/projects/${args.project_id}/assignment-recommendations`);
+
+    // === Import/Export ===
+    case 'export_project':
+      return get(`/api/projects/${args.project_id}/export?format=${args.format}`);
+    case 'import_project':
+      return post('/api/projects/import', { data: args.data, overwrite: args.overwrite });
+
+    // === Templates ===
+    case 'create_task_template':
+      return post(`/api/projects/${args.project_id}/templates`, {
+        name: args.name,
+        description: args.description,
+        priority: args.priority,
+        estimated_hrs: args.estimated_hrs,
+        subtasks: args.subtasks,
+      });
+    case 'list_task_templates':
+      return get(`/api/projects/${args.project_id}/templates`);
+    case 'apply_task_template':
+      return post(`/api/templates/${args.template_id}/apply`, {
+        title: args.title,
+        epic_id: args.epic_id,
+        description: args.description,
+        priority: args.priority,
+        estimated_hrs: args.estimated_hrs,
+        assignee: args.assignee,
       });
 
     // === Analysis (subagent) ===
