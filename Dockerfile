@@ -22,9 +22,10 @@ ENV NODE_OPTIONS="--max-old-space-size=384"
 RUN pnpm --filter @ai-pm/mcp-server build
 RUN pnpm --filter @ai-pm/web-ui build
 
-ENV PORT=3001
 ENV STATIC_PATH=/app/packages/web-ui/dist
 
+# Port is dynamically assigned via PORT env var at runtime
+# EXPOSE 3001 is for local development reference only
 EXPOSE 3001
 
 CMD ["node", "--max-old-space-size=384", "packages/mcp-server/dist/api-server.js"]
