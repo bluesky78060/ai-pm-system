@@ -149,19 +149,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     // Task tools
     {
       name: 'create_task',
-      description: 'Create a new task. AI can autonomously create tasks without approval.',
+      description: 'Create a new task. AI can autonomously create tasks without approval. IMPORTANT: epic_id is REQUIRED - tasks without epic_id will not appear on dashboard.',
       inputSchema: {
         type: 'object' as const,
         properties: {
           title: { type: 'string', description: 'Task title' },
-          project_id: { type: 'string', description: 'Project ID (used to find epic)' },
-          epic_id: { type: 'string', description: 'Epic ID' },
+          epic_id: { type: 'string', description: 'Epic ID (REQUIRED - use get_project_status to find epic_id, look for "General" epic if unsure)' },
+          project_id: { type: 'string', description: 'Project ID (optional - used with epic_id)' },
           description: { type: 'string', description: 'Task description' },
           priority: { type: 'number', description: 'Priority 1(high)-5(low), default 3' },
           assignee: { type: 'string', description: 'ai | human | username' },
           parent_id: { type: 'string', description: 'Parent task ID for subtasks' },
         },
-        required: ['title'],
+        required: ['title', 'epic_id'],
       },
     },
     {
