@@ -26,8 +26,9 @@ export default function VelocityChart({ projectId }: VelocityChartProps) {
 
         // Process activities to count completions per day
         for (const activity of activities) {
-          if (activity.action === 'completed') {
-            const date = new Date(activity.timestamp).toLocaleDateString('en-US', {
+          if (!activity.task_id || !activity.created_at) continue;
+          if (activity.action === 'status_change' && activity.payload?.to === 'done') {
+            const date = new Date(activity.created_at).toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric',
             });
