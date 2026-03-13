@@ -404,8 +404,8 @@ describe('WorkloadService.getWorkloadByAssignee', () => {
     });
     await taskSvc.updateStatus(task3.task.id, 'in_progress');
     await taskSvc.updateStatus(task3.task.id, 'testing');
-    await taskSvc.updateStatus(task3.task.id, 'review');
-    await taskSvc.updateStatus(task3.task.id, 'done');
+    await taskSvc.updateStatus(task3.task.id, 'review', undefined, { bypassGuard: true });
+    await taskSvc.updateStatus(task3.task.id, 'done', undefined, { bypassGuard: true });
 
     // Create task for bob (1 in_progress)
     const task4 = await taskSvc.create({
