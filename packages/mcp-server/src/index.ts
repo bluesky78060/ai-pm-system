@@ -17,6 +17,7 @@ import { WorkloadService } from './services/workload-service.js';
 import { TemplateService } from './services/template-service.js';
 import { ExportService } from './services/export-service.js';
 import { AutoAssignmentService } from './services/auto-assignment-service.js';
+import { ResearchService, type ResearchInput } from './services/research-service.js';
 import type { AutomationTrigger, AutomationAction } from './types/entities.js';
 import { isRemoteMode, executeRemote } from './remote-client.js';
 
@@ -63,6 +64,7 @@ const workloadService = remote ? null! : new WorkloadService();
 const templateService = remote ? null! : new TemplateService();
 const exportService = remote ? null! : new ExportService();
 const autoAssignmentService = remote ? null! : new AutoAssignmentService();
+const researchService = remote ? null! : new ResearchService();
 
 // Create MCP server
 const server = new Server(
@@ -676,6 +678,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['template_id'],
       },
     },
+    // Research tools (Gemini)
+    {
+      name: 'research_with_gemini',
+      description: 'Run automated external research via Google Gemini API and save the result as markdown to docs/06-research/. Use this between Discovery and Plan stages to gather library comparisons, security/vulnerability scans, best practices, or debugging context. CALLER RESPONSIBILITY: Get explicit user approval first (cost gate), then call with confirmed=true. Tool is stateless and cannot prompt user.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          task_id: { type: 'string', description: 'Active ticket code (e.g., APS-1-1). Pattern: ^[A-Z]+(-\\d+)+$' },
+          topic: { type: 'string', description: 'Research topic (1~500 chars)' },
+          purpose: {
+            type: 'string',
+            enum: ['library_compare', 'security_audit', 'best_practice', 'debugging'],
+            description: 'Research purpose (default: best_practice)',
+          },
+          model: { type: 'string', description: 'Gemini model (default: gemini-2.5-flash)' },
+          context: { type: 'string', description: 'Additional context (0~2000 chars, optional)' },
+          confirmed: { type: 'boolean', description: 'REQUIRED: Caller has obtained user approval for this paid API call. Tool rejects if false.' },
+        },
+        required: ['task_id', 'topic', 'confirmed'],
+      },
+    },
   ],
 }));
 
@@ -1038,6 +1061,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             assignee: args?.assignee as string | undefined,
           }
         );
+        break;
+      }
+      // Research tools
+      case 'research_with_gemini': {
+        const input: ResearchInput = {
+          task_id: args?.task_id as string,
+          topic: args?.topic as string,
+          purpose: args?.purpose as ResearchInput['purpose'],
+          model: args?.model as string | undefined,
+          context: args?.context as string | undefined,
+          confirmed: args?.confirmed as boolean,
+        };
+        result = await researchService.executeResearch(input);
         break;
       }
       default:

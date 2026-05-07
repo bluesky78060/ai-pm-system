@@ -23,6 +23,53 @@
 - **종료 조건**: 사용자가 "방향 확정" 명시적으로 승인
 - **승인 없이 플랜 작성 단계로 진행 금지**
 
+## 선택적 리서치 단계 (3→4 사이)
+
+Discovery에서 외부 정보 조사가 필요하다고 판단된 경우(라이브러리 비교, 보안 취약점, 모범 사례, 디버깅) 플랜 작성 전 Gemini 자동 리서치를 실행할 수 있습니다.
+
+### 호출 규약 (CRITICAL)
+
+`research_with_gemini` MCP 도구는 stateless이므로 **도구 자체가 사용자 승인을 받을 수 없습니다**. 메인 오케스트레이터가 다음 절차를 따릅니다:
+
+1. 사용자에게 비용/필요성을 명시적으로 확인 ("Gemini API 호출 1회당 약 $0.05 예상, 진행할까요?")
+2. 사용자 승인 후 `confirmed: true`로 도구 호출
+3. `confirmed !== true` 시 도구가 즉시 `NOT_CONFIRMED` 반환
+
+### 호출 예시
+
+```typescript
+mcp__ai-pm__research_with_gemini({
+  task_id: "APS-1-1",                       // ticket code 형식 강제
+  topic: "Node.js 환경변수 안전 관리 모범 사례",  // 1~500자
+  purpose: "best_practice",                  // library_compare | security_audit | best_practice | debugging
+  context: "TypeScript 모노레포 프로젝트",       // 0~2000자 (선택)
+  confirmed: true                            // 사용자 승인 후 true
+})
+```
+
+### 산출물
+
+- **경로**: `docs/06-research/{ticket_id}-research-{ISO8601 압축형}-{ms}.md`
+- **형식**: 마크다운 (티켓/목적/모델/생성일/메트릭 + 요약 + 참고 자료)
+- **메트릭**: input_tokens, output_tokens, duration_ms
+
+### 환경변수
+
+`GEMINI_API_KEY` 환경변수 필수. 발급: https://aistudio.google.com/apikey
+
+### 강제성
+
+선택 사항입니다 (hook으로 강제 차단 안 함). 다만 다음 상황에서 강력 권장:
+- P0 기능 + 새 라이브러리 도입
+- 보안/인증/암호화 영역 변경
+- 디버깅이 30분 이상 진행되는 막힘 상태
+
+### 보안
+
+- API 키는 `~/.zshrc` 또는 `.env`로 관리 (코드/로그에 절대 노출 금지)
+- 도구 내부에서 에러 메시지의 API 키 자동 마스킹
+- 사용자 입력(`topic`, `context`)은 prompt 인젝션 방어 후 Gemini로 전달
+
 ## 4단계: 플랜 작성
 
 - **Superpowers 스킬**: `superpowers:writing-plans` 자동 트리거 (파일별/태스크별 분해 + TDD/YAGNI/DRY 강제)

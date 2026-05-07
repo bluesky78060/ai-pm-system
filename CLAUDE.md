@@ -11,6 +11,7 @@
 1. **epic_id 확인** — `get_project_status`로 에픽 조회 (null 절대 금지)
 2. **티켓 발행** — `create_task(epic_id="...", title="...", ...)`
 3. **Discovery Q&A** — 사용자 7개 카테고리 문답 → `docs/00-discovery/` (상세: `.claude/rules/discovery-and-plan.md`)
+   - **선택적 리서치** (3→4 사이): `mcp__ai-pm__research_with_gemini` 호출 → `docs/06-research/` (필요 시)
 4. **플랜 작성** — `docs/01-plan/` (상세: `.claude/rules/discovery-and-plan.md`)
 5. **플랜 리뷰** — critic + 오케스트레이터 2단 검증 → `docs/02-review/` (상세: `.claude/rules/discovery-and-plan.md`)
 6. **팀 에이전트 병렬 위임** — 파일 소유권 파티셔닝 (에이전트 매핑: `.claude/rules/agent-mapping.md`)
@@ -58,3 +59,4 @@
 - **Monorepo**: pnpm workspaces (`@ai-pm/mcp-server`, `@ai-pm/web-ui`)
 - **Build**: `pnpm -r build` / **Test**: `pnpm --filter @ai-pm/mcp-server test`
 - **Deploy**: Render → `https://ai-pm-system.onrender.com`
+- **Env vars**: `DATABASE_URL` (필수, Postgres 연결), `GEMINI_API_KEY` (선택, `research_with_gemini` 도구 사용 시 필수)
