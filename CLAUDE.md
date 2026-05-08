@@ -32,6 +32,7 @@
 | smart_workflow 단계 | `.claude/rules/workflow-steps.md` |
 | 금지 사항 (전체) | `.claude/rules/prohibitions.md` |
 | 개발 단축 팁 (watch/병렬/self-healing) | `.claude/rules/dev-tips.md` |
+| 표준 템플릿 (MCP 도구·외부 API·서비스) | `.claude/templates/` |
 
 ## 핵심 강제 규칙 (요약)
 
