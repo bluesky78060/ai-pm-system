@@ -51,3 +51,27 @@ echo '{"tool_name":"mcp__ai-pm__smart_workflow","tool_input":{"action":"approve_
 ## 결론
 
 `codex-review-guard.sh`가 새 옵션 2 정책과 정합. 단순 외부 통합 작업의 hook 차단 우회 부담 제거됨. 진짜 위험 영역(보안/DB/결제/권한)은 여전히 3중 검증 강제.
+
+---
+
+## APS-1-4 추가: plan-review-guard.sh fast-track 모드
+
+`.claude/active-ticket-fasttrack` 마커 파일 도입 시나리오 검증.
+
+### 시나리오 (3건)
+
+| # | 시나리오 | 기대 | 실제 | 결과 |
+|---|---------|------|------|------|
+| 1 | 마커 + active-ticket 일치 → 우회 | exit 0 | exit 0 | ✅ |
+| 2 | 마커 있으나 불일치 → 기존 검증 | exit 2 | exit 2 | ✅ |
+| 3 | 마커 없음 → 기존 동작 (회귀 0) | exit 2 | exit 2 | ✅ |
+
+**3/3 PASS**. 마커 부재 시 기존 동작 100% 보존.
+
+### 활성화 명령
+
+```bash
+echo "APS-X-Y" > .claude/active-ticket
+echo "APS-X-Y" > .claude/active-ticket-fasttrack
+# → start_work 호출 시 산출물 검증 우회
+```

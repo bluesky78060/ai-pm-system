@@ -14,6 +14,7 @@
    - **선택적 리서치** (3→4 사이): `mcp__ai-pm__research_with_gemini` 호출 → `docs/06-research/` (필요 시)
 4. **플랜 작성** — `docs/01-plan/` (상세: `.claude/rules/discovery-and-plan.md`)
 5. **플랜 리뷰** — critic + 오케스트레이터 2단 검증 → `docs/02-review/` (상세: `.claude/rules/discovery-and-plan.md`)
+   - **Fast-track**: 1중 분류 단순 변경은 3~5단계 생략 가능 (`.claude/rules/fast-track.md`)
 6. **팀 에이전트 병렬 위임** — 파일 소유권 파티셔닝 (에이전트 매핑: `.claude/rules/agent-mapping.md`)
 7. **빌드/테스트 → smart_workflow** — Iron Law 적용 (상세: `.claude/rules/workflow-steps.md`)
 8. **PR 생성** — `/ship` (상세: `.claude/rules/deploy-automation.md`)
@@ -33,6 +34,7 @@
 | 금지 사항 (전체) | `.claude/rules/prohibitions.md` |
 | 개발 단축 팁 (watch/병렬/self-healing) | `.claude/rules/dev-tips.md` |
 | 표준 템플릿 (MCP 도구·외부 API·서비스) | `.claude/templates/` |
+| Fast-track 정책 (1중 분류 단순 변경) | `.claude/rules/fast-track.md` |
 
 ## 핵심 강제 규칙 (요약)
 

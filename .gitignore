@@ -12,4 +12,5 @@ data/*.db-shm
 .pdca-status.json
 .omc/
 .claude/active-ticket
+.claude/active-ticket-fasttrack
 .claude/settings.local.json

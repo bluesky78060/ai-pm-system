@@ -28,6 +28,19 @@ if [[ -f "$TICKET_FILE" ]]; then
   TICKET=$(cat "$TICKET_FILE" | tr -d '[:space:]')
 fi
 
+# === APS-1-4: Fast-track 모드 우회 ===
+# .claude/active-ticket-fasttrack 파일이 존재하고 active-ticket과 일치하면
+# 산출물 검증 우회. 1중 분류 단순 변경에 적용.
+FASTTRACK_FILE="$PROJECT_ROOT/.claude/active-ticket-fasttrack"
+if [[ -f "$FASTTRACK_FILE" ]]; then
+  FT_TICKET=$(cat "$FASTTRACK_FILE" | tr -d '[:space:]')
+  if [[ -n "$FT_TICKET" && "$FT_TICKET" == "$TICKET" ]]; then
+    echo "[Plan-Review Guard] fast-track 모드 활성 — 산출물 검증 우회 ($TICKET)" >&2
+    echo "  주의: fast-track은 1중 분류 단순 변경에만 사용. 보안/결제/DB는 정식 워크플로우 의무." >&2
+    exit 0
+  fi
+fi
+
 DISCOVERY_DIR="$PROJECT_ROOT/docs/00-discovery"
 PLAN_DIR="$PROJECT_ROOT/docs/01-plan"
 REVIEW_DIR="$PROJECT_ROOT/docs/02-review"
