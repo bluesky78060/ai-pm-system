@@ -1,45 +1,76 @@
-# 코드 리뷰 정책 (Codex MCP 통합 - 옵션 B: 선택 강화)
+# 코드 리뷰 정책 (Codex 통합 - 옵션 B + 강도 재분류 + Self-healing)
 
 `smart_workflow(task_id, 'approve_review', ...)` 호출 전 다음 정책에 따라 리뷰 수행.
 
-## 리뷰 강도 분류 기준
+## 리뷰 강도 3단계 분류 (재분류됨)
 
-**일반 변경** (단일 리뷰):
-- UI 스타일·문구 수정, 단순 버그 수정, 리팩터링(동작 동일)
-- 테스트 코드만 변경, 문서/주석 변경
+### 🟢 1중 검증 (단일 리뷰) — 일반 변경
+- UI 스타일·문구·아이콘·색상 수정
+- 단순 버그 수정 (단일 함수 내, 동작 의도 동일)
+- 리팩터링(동작 보존)
+- 테스트 코드만 변경
+- 문서/주석/CHANGELOG/README 변경
 
-**중요 변경** (다중 모델 교차 검증 필수):
-- **P0 우선순위 태스크** (Discovery에서 P0로 분류된 기능)
-- **보안 관련**: 인증·인가·세션·암호화·SQL 구성·외부 입력 처리
-- **아키텍처 변경**: 모듈 구조, 의존성, 인터페이스 계약 변경
-- **DB 마이그레이션**: 스키마 변경, 데이터 백필, 인덱스 변경
-- **외부 통합**: MCP 서버 추가/변경, 외부 API 연동, 인프라 설정
+→ `code-reviewer` 1회만 통과
+
+### 🟡 2중 검증 — 외부 통합·일반 신규 기능
+- 외부 API 통합 (인증·암호화 영역 제외)
+- 새 MCP 도구 추가
+- 새 React 컴포넌트·페이지
+- 백엔드 서비스 클래스 신규
+- 신규 라이브러리 의존성 추가
+
+→ `code-reviewer` (1차) + `security-reviewer` (2차) 통과
+→ Codex challenge 생략 가능 (challenge 모드는 진짜 위험 영역에만)
+
+### 🔴 3중 검증 — 진짜 위험 영역
+- **인증/세션/암호화**: JWT, OAuth, 비밀번호, 키 관리
+- **DB 마이그레이션**: 스키마 변경, 데이터 백필, 인덱스
+- **신규 인프라**: 새 외부 서비스 도입, 네트워크 보안 설정
+- **결제/금전**: 빌링, 환불, 결제 연동
+- **권한 시스템**: RBAC, ACL, 권한 검증 로직
+
+→ `code-reviewer` + `security-reviewer` (또는 `codex review`) + adversarial challenge (`critic` 또는 `codex challenge`) 모두 통과
+
+## Self-healing 자동 루프 (신규)
+
+1차 리뷰에서 **MAJOR 이하만** 발견된 경우:
+
+- 메인 오케스트레이터가 즉시 `executor-high`에 "이 MAJOR 항목 + 회귀 테스트 추가" 위임
+- 사용자 개입 없이 1라운드 내 자동 수정·재검증
+- 재검증 통과 시 다음 라운드 진행
+
+**예외 (사용자 확인 필수)**:
+- CRITICAL 발견 → 즉시 사용자 보고
+- 같은 라운드에서 3건 이상 MAJOR → 설계 결함 가능성, 사용자 확인
+- 정책·범위 변경 (예: model 화이트리스트 추가) → 사용자 확인
 
 ## 리뷰 실행 절차
 
-**일반 변경**:
-1. `code-reviewer` 에이전트(Opus) 또는 `/code-review` 스킬로 독립 리뷰
-2. 통과 시 → `smart_workflow(approve_review, notes='...')`
+**1중 (일반 변경)**:
+1. `code-reviewer`(Opus) 또는 `/code-review` 스킬로 독립 리뷰
+2. CRITICAL/MAJOR 0 → 즉시 `approve_review`
+3. CRITICAL/MAJOR 발견 → request_changes → self-healing 루프
 
-**중요 변경 (3중 검증)**:
-1. **1차 — Claude 리뷰**: `code-reviewer` 에이전트(Opus)로 품질·가독성·패턴 검토
-2. **2차 — Codex 리뷰**: `codex:rescue` 스킬 또는 `/codex review`로 독립 diff 리뷰 (pass/fail 게이트)
-   - 모델 다양성 확보 (GPT 계열로 편향 보정)
-3. **3차 — Codex Challenge**: `/codex` skill의 challenge 모드로 적대적 검증
-   - "이 코드를 어떻게 깨뜨릴 수 있나" 관점의 공격 시나리오 도출
-   - 엣지케이스·경합 조건·보안 취약점 노출
-4. **종합 판단**: 메인 오케스트레이터가 3개 리뷰 결과 교차 검증
-   - 1·2차 모두 pass + 3차 challenge 대응 완료 시에만 승인
-   - 어느 하나라도 fail/critical 발견 시 → 수정 후 재리뷰
+**2중 (외부 통합·신규 기능)**:
+1. `code-reviewer` + `security-reviewer` **병렬 dispatch** (단일 메시지 multi tool_use)
+2. 둘 다 PASS → `approve_review`
+3. 어느 한 쪽이라도 CRITICAL/MAJOR → self-healing 루프
+
+**3중 (진짜 위험)**:
+1. `code-reviewer` + `security-reviewer` (또는 `codex review`) + `critic` (adversarial 또는 `codex challenge`) **병렬 dispatch**
+2. 모두 PASS → `approve_review`
+3. CRITICAL 발견 → 사용자 확인 후 수정
+4. MAJOR만 발견 → self-healing 루프
 
 ## 산출물
 
 - `docs/03-code-review/{task-id}-review.md`
-  - Claude 리뷰 결과, Codex 리뷰 pass/fail, Challenge 발견 항목 및 대응
-  - 최종 판정 및 `approve_review` notes 원문 (20자 이상)
+  - 적용된 검증 라운드, 발견 사항 + 대응, 최종 판정
 
 ## approve_review 호출 규칙
 
-- 일반 변경: notes에 `code-reviewer 통과: <요약>` 명시
-- 중요 변경: notes에 `code-reviewer + codex review + challenge 3중 통과: <요약>` 명시
-- self-approval 금지 (코드 작성자 본인이 리뷰 결과 작성 금지)
+- 1중: `code-reviewer 통과: <요약>` (20자+)
+- 2중: `code-reviewer + security-reviewer 2중 통과: <요약>`
+- 3중: `code-reviewer + codex review + challenge 3중 통과: <요약>` (또는 Claude 대체 시 `+ security-reviewer + critic adversarial 3중`)
+- self-approval 금지 (작성자 ≠ 리뷰어)

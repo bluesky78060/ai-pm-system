@@ -31,6 +31,7 @@
 | 에이전트 매핑 | `.claude/rules/agent-mapping.md` |
 | smart_workflow 단계 | `.claude/rules/workflow-steps.md` |
 | 금지 사항 (전체) | `.claude/rules/prohibitions.md` |
+| 개발 단축 팁 (watch/병렬/self-healing) | `.claude/rules/dev-tips.md` |
 
 ## 핵심 강제 규칙 (요약)
 
