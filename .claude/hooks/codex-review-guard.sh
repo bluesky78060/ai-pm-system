@@ -59,23 +59,36 @@ if [[ -n "$TICKET" ]]; then
   IS_CRITICAL=0
   CRITICAL_REASONS=()
 
-  # 보안 관련
+  # === APS-1-3: 옵션 2 정책 동기화 ===
+  # 진짜 위험 영역만 3중 검증 강제. 단순 외부 통합(MCP 도구 추가 등)은 2중으로 완화됨.
+  # 정책 근거: .claude/rules/code-review.md (3단계 분류)
+
+  # 보안 관련 (인증/세션/암호화) — 3중 강제
   if echo "$CHANGED_FILES" | grep -qE "(auth|session|crypto|password|token|jwt|oauth)" ; then
     IS_CRITICAL=1
     CRITICAL_REASONS+=("보안 관련 파일 변경")
   fi
 
-  # DB 마이그레이션
+  # DB 마이그레이션 — 3중 강제
   if echo "$CHANGED_FILES" | grep -qE "(migrate|migration|schema\.(sql|ts|js)|db/migrations)"; then
     IS_CRITICAL=1
     CRITICAL_REASONS+=("DB 마이그레이션 변경")
   fi
 
-  # 외부 통합
-  if echo "$CHANGED_FILES" | grep -qE "(mcp-server|api-server|webhook|external)"; then
+  # 결제/금전 — 3중 강제 (APS-1-3 추가)
+  if echo "$CHANGED_FILES" | grep -qE "(payment|billing|invoice|stripe)"; then
     IS_CRITICAL=1
-    CRITICAL_REASONS+=("MCP/외부 통합 변경")
+    CRITICAL_REASONS+=("결제 시스템 변경")
   fi
+
+  # 권한 시스템 — 3중 강제 (APS-1-3 추가)
+  if echo "$CHANGED_FILES" | grep -qE "(permission|rbac|acl|authoriz)"; then
+    IS_CRITICAL=1
+    CRITICAL_REASONS+=("권한 시스템 변경")
+  fi
+
+  # NOTE: 일반 외부 통합 패턴(mcp-server|api-server|webhook|external)은
+  # 옵션 2 정책에 따라 2중 검증으로 완화되어 본 hook에서 제거됨 (APS-1-3).
 
   # 4. 중요 변경 시 codex review + challenge 흔적 확인
   if [[ $IS_CRITICAL -eq 1 ]]; then
