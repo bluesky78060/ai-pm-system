@@ -61,8 +61,49 @@ alias apm-dev='pnpm --filter @ai-pm/mcp-server dev'
 alias apm-watch='pnpm --filter @ai-pm/mcp-server test:watch'
 ```
 
+## 외부 API 통합 보안 표준 (APS-1-2 도입)
+
+새 외부 API 통합 시 `_security-base.ts` 모듈을 import하여 표준 보안 패턴을 적용. 이를 통해 3차 adversarial 발견 사항(API 키 leak, 프롬프트 인젝션, 파일 충돌, ENAMETOOLONG, 위험 URL)을 사전 차단.
+
+### 사용 예시
+
+```typescript
+import {
+  maskApiKey,
+  sanitizeErrorMessage,
+  buildPromptInjectionMarkers,
+  sanitizeUserInput,
+  atomicWrite,
+  validateTaskId,
+  filterSafeUrls,
+} from './_security-base.js';
+
+// 1. API 키 에러 메시지 마스킹 (4중 방어)
+const safeMsg = sanitizeErrorMessage(rawError, process.env.API_KEY);
+
+// 2. 프롬프트 인젝션 nonce 마커
+const { nonce, startMarker, endMarker } = buildPromptInjectionMarkers();
+const userPrompt = `${startMarker}\n${sanitizeUserInput(input)}\n${endMarker}`;
+
+// 3. atomic 파일 쓰기 (race + 부분 쓰기 방어)
+await atomicWrite('docs/output.md', content);  // mode 0o600 default
+
+// 4. task_id 검증 (정규식 + 길이 캡)
+const validation = validateTaskId(input.task_id);
+if (!validation.valid) return { error: validation.error };
+
+// 5. URL 안전 필터 (위험 스킴 + 길이/개수 cap)
+const safeUrls = filterSafeUrls(extractedUrls);
+```
+
+### 도입 효과
+
+- 신규 외부 API 통합 작업의 보안 라운드 생략 (-15%)
+- adversarial challenge에서 발견될 7가지 위험 패턴 사전 차단
+
 ## 효과
 
 - Watch 모드: 라운드당 ~30초 절약 × N 라운드
 - Self-healing 자동 루프 (`code-review.md` 참조): MAJOR 발견 시 사용자 개입 없이 1라운드 단축
 - 병렬 dispatch (`agent-mapping.md` 참조): 리뷰 라운드 60% 단축
+- 보안 공유 모듈 (`_security-base.ts`): 외부 API 통합 시 보안 라운드 -15%

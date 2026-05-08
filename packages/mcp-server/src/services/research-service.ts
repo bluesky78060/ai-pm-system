@@ -17,9 +17,21 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { GoogleGenAI } from '@google/genai';
+import {
+  maskApiKey,
+  sanitizeErrorMessage,
+  buildPromptInjectionMarkers,
+  sanitizeUserInput,
+  atomicWrite,
+  validateTaskId,
+  filterSafeUrls,
+  TASK_ID_MAX_LEN_DEFAULT,
+  URL_MAX_LEN_DEFAULT,
+  URL_MAX_COUNT_DEFAULT,
+} from './_security-base.js';
 
 // ──────────────────────────────────────────────────────────────────
-// 상수
+// 상수 (도메인 고유 — 그 외 보안 상수는 _security-base 사용)
 // ──────────────────────────────────────────────────────────────────
 
 const RESEARCH_MODEL = 'gemini-2.5-flash';
@@ -27,12 +39,11 @@ const RESEARCH_DIR_DEFAULT = 'docs/06-research';
 const MAX_OUTPUT_TOKENS = 8192;
 const TOPIC_MAX_LEN = 500;
 const CONTEXT_MAX_LEN = 2000;
-const TICKET_PATTERN = /^[A-Z]+(-\d+)+$/;
-/** M1: task_id 길이 캡 (파일시스템 ENAMETOOLONG 방어 — 64자 한도) */
-const TASK_ID_MAX_LEN = 64;
-/** M5: parseSources 결과 캡 (LLM 응답 페이로드 비대화 방어) */
-const MAX_URL_LEN = 2048;
-const MAX_SOURCES = 50;
+/** task_id 길이 캡 — _security-base 기본값(64) 사용 */
+const TASK_ID_MAX_LEN = TASK_ID_MAX_LEN_DEFAULT;
+/** parseSources URL/개수 cap — _security-base 기본값 사용 */
+const MAX_URL_LEN = URL_MAX_LEN_DEFAULT;
+const MAX_SOURCES = URL_MAX_COUNT_DEFAULT;
 
 /**
  * 비용 가드: 호출자가 임의 모델 지정으로 고비용(예: Pro) 모델 우회 호출 방지.
@@ -99,35 +110,10 @@ export type ResearchResult = ResearchResultSuccess | ResearchResultFailure;
 
 // ──────────────────────────────────────────────────────────────────
 // 내부 헬퍼 (모듈 스코프)
+// 참고: maskApiKey, sanitizeErrorMessage, sanitizeUserInput,
+//       buildPromptInjectionMarkers, atomicWrite, validateTaskId,
+//       filterSafeUrls는 ./_security-base.js에서 import (APS-1-2)
 // ──────────────────────────────────────────────────────────────────
-
-/**
- * API 키 마스킹: 처음 4자 + '***'
- * 빈/짧은 키는 통째로 '***'로 치환.
- */
-function maskApiKey(key: string | undefined | null): string {
-  if (!key || key.length < 8) return '***';
-  return `${key.slice(0, 4)}***`;
-}
-
-/**
- * 에러 메시지에서 API 키 원문이 노출될 수 있는 부분을 마스킹.
- */
-function sanitizeErrorMessage(rawMessage: string, apiKey: string | undefined): string {
-  let out = rawMessage;
-  // 1) 현재 사용 중인 키 자체를 정확 매치로 마스킹 (raw 형태)
-  if (apiKey && apiKey.length > 0) {
-    const escaped = apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    out = out.replace(new RegExp(escaped, 'g'), maskApiKey(apiKey));
-  }
-  // 2) C2 패치: Google API 키 일반 패턴(`AIza` + 35자) 마스킹 — partial/다른 키도 차단
-  out = out.replace(/AIza[0-9A-Za-z_\-]{20,}/g, 'AIza***');
-  // 3) C2 패치: URL 쿼리 파라미터 형태(`?key=...`, `&key=...`) 마스킹
-  out = out.replace(/([?&]key=)[^&\s]+/gi, '$1***');
-  // 4) C2 패치: Authorization 헤더 형태 (Bearer ... / Basic ...) 마스킹
-  out = out.replace(/(Bearer|Basic)\s+[A-Za-z0-9+/_\-=.]{16,}/gi, '$1 ***');
-  return out;
-}
 
 /**
  * purpose별 system prompt 템플릿.
@@ -157,22 +143,12 @@ function buildSystemPrompt(purpose: ResearchPurpose): string {
   return baseRule + purposeAddon[purpose];
 }
 
-/**
- * 사용자 입력 sanitize: 프롬프트 분리 우회를 어렵게 함.
- * - 백틱(`)을 zero-width space + backtick으로 치환 (가독성 보존하며 인젝션 방어)
- */
-function sanitizeUserInput(input: string): string {
-  return input.replace(/`/g, '​`');
-}
-
 function buildUserPrompt(topic: string, context: string | undefined): string {
   const safeTopic = sanitizeUserInput(topic);
   const safeContext = context ? sanitizeUserInput(context) : '';
 
-  // 매 호출마다 nonce 생성 — 사용자가 BEGIN/END 마커 문자열을 입력해도 추측 불가
-  const nonce = randomBytes(8).toString('hex');
-  const startMarker = `===== USER_INPUT_START [${nonce}] =====`;
-  const endMarker = `===== USER_INPUT_END [${nonce}] =====`;
+  // _security-base의 nonce 마커 생성기 사용 (APS-1-2 마이그레이션)
+  const { nonce, startMarker, endMarker } = buildPromptInjectionMarkers();
 
   const lines: string[] = [];
   lines.push(
@@ -318,35 +294,20 @@ export class ResearchService {
       found.push(url);
     }
 
-    // 위험 스킴 필터 + 안전한 http/https만 남김 + 중복 제거
+    // _security-base의 filterSafeUrls 사용 (위험 스킴 + 길이 cap)
+    // dedupe는 호출자(여기) 책임
+    const filtered = filterSafeUrls(found, {
+      maxUrlLen: MAX_URL_LEN,
+      maxCount: MAX_SOURCES,
+    });
     const seen = new Set<string>();
     const out: string[] = [];
-    for (const raw of found) {
-      const trimmed = raw.trim();
-      if (trimmed.length === 0) continue;
-      const lower = trimmed.toLowerCase();
-      if (
-        lower.startsWith('javascript:') ||
-        lower.startsWith('data:') ||
-        lower.startsWith('file://')
-      ) {
-        continue;
-      }
-      // http/https만 허용
-      if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
-        continue;
-      }
-      // M5 패치: 단일 URL 길이 cap 초과 시 제외 (페이로드 비대화 방어)
-      if (trimmed.length > MAX_URL_LEN) {
-        continue;
-      }
-      if (seen.has(trimmed)) continue;
-      seen.add(trimmed);
-      out.push(trimmed);
-      // M5 패치: 결과 배열 cap 도달 시 조기 종료
+    for (const url of filtered) {
+      if (seen.has(url)) continue;
+      seen.add(url);
+      out.push(url);
       if (out.length >= MAX_SOURCES) break;
     }
-
     return out;
   }
 
@@ -468,15 +429,10 @@ export class ResearchService {
       sources,
     });
 
-    // M3 패치: atomic write (임시 파일 → rename) + 권한 0600 명시
-    // ENOSPC 등 부분 쓰기 시 손상된 결과 파일이 디스크에 남지 않도록 보장
-    const tmpPath = `${filePath}.tmp-${randomBytes(4).toString('hex')}`;
+    // _security-base의 atomicWrite 사용 (APS-1-2 마이그레이션)
     try {
-      await fs.writeFile(tmpPath, fileContent, { encoding: 'utf8', mode: 0o600 });
-      await fs.rename(tmpPath, filePath);
+      await atomicWrite(filePath, fileContent);
     } catch (err) {
-      // 실패 시 임시 파일 cleanup (실패해도 무시 — 이미 부재할 수 있음)
-      await fs.unlink(tmpPath).catch(() => undefined);
       return {
         success: false,
         error_code: 'UNKNOWN',
@@ -502,15 +458,10 @@ export class ResearchService {
    * (throws하지 않고 사유 반환 — 호출 측이 통합된 ResearchResultFailure로 포장)
    */
   private validateInput(input: ResearchInput): string | null {
-    // task_id 형식
-    if (typeof input.task_id !== 'string' || !TICKET_PATTERN.test(input.task_id)) {
-      return `task_id 형식이 올바르지 않습니다. 예: APS-1-1 (정규식: ^[A-Z]+(-\\d+)+$). 입력값: ${String(
-        input.task_id,
-      )}`;
-    }
-    // M1 패치: task_id 길이 캡 (파일시스템 ENAMETOOLONG 방어)
-    if (input.task_id.length > TASK_ID_MAX_LEN) {
-      return `task_id는 ${TASK_ID_MAX_LEN}자를 초과할 수 없습니다 (현재: ${input.task_id.length}자).`;
+    // task_id: 형식 + 길이 검증 (_security-base의 validateTaskId 사용 — APS-1-2 마이그레이션)
+    const taskIdResult = validateTaskId(input.task_id, TASK_ID_MAX_LEN);
+    if (!taskIdResult.valid) {
+      return taskIdResult.error ?? 'task_id 검증 실패';
     }
 
     // topic
