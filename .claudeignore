@@ -1,0 +1,50 @@
+# Claude Code 접근 차단 파일 (APS-1-5)
+# .gitignore와 동일 형식. Claude가 읽지 않을 파일·디렉터리 지정.
+
+# 환경변수·시크릿
+.env
+.env.*
+.envrc
+*.pem
+*.key
+*.p12
+*.pfx
+
+# 자격증명
+credentials/
+secrets/
+.aws/
+.gcp/
+
+# DB 백업·덤프
+data/*.db
+data/*.db-wal
+data/*.db-shm
+*.sqlite
+*.sqlite3
+backup-*.sql
+render-data-backup.sql
+neon-schema.sql
+*.dump
+
+# 로컬 임시 파일
+.pdca-status.json
+.bkit-memory.json
+.playwright-mcp/
+.omc/
+
+# 빌드 산출물
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+.next/
+
+# 로그
+*.log
+logs/
+
+# OS 메타데이터
+.DS_Store
+Thumbs.db
