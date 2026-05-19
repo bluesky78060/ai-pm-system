@@ -1,9 +1,27 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 
-// Set in-memory DB before any imports that trigger DB initialization
-process.env.DB_PATH = ':memory:';
+// APS-5-1 safety guard — refuse to run if DATABASE_URL points at production.
+// Mirrors the guard in context-service.test.ts (APS-2-7 incident reference).
+const dbUrl = process.env.DATABASE_URL ?? '';
+if (!dbUrl) {
+  throw new Error(
+    'APS-5-1 SAFETY: DATABASE_URL is not set. Create .env.test at repo root pointing to a dedicated test database.',
+  );
+}
+// Compute hosts for the production branch (br-billowing-heart-aozi9xug).
+const PROD_COMPUTE_HOSTS = [
+  'ep-old-haze-aol2r7dt.c-2.ap-southeast-1.aws.neon.tech',
+  'ep-old-haze-aol2r7dt-pooler.c-2.ap-southeast-1.aws.neon.tech',
+];
+if (PROD_COMPUTE_HOSTS.some((host) => dbUrl.includes(host))) {
+  throw new Error(
+    'APS-5-1 SAFETY: DATABASE_URL points at the production Neon compute ' +
+    '(ep-old-haze-aol2r7dt). Tests must use a dedicated branch endpoint via .env.test ' +
+    '(loaded by vitest.config.ts).',
+  );
+}
 
-// Dynamic imports after env setup to ensure the in-memory DB path is used
+// Dynamic imports
 let TaskService: typeof import('../services/task-service.js').TaskService;
 let TestService: typeof import('../services/test-service.js').TestService;
 let ProjectRepository: typeof import('../db/repositories/project-repo.js').ProjectRepository;
@@ -11,6 +29,7 @@ let EpicRepository: typeof import('../db/repositories/epic-repo.js').EpicReposit
 let FixAttemptRepository: typeof import('../db/repositories/fix-attempt-repo.js').FixAttemptRepository;
 let runMigrations: typeof import('../db/migrate.js').runMigrations;
 let closeDb: typeof import('../db/connection.js').closeDb;
+let getPool: typeof import('../db/connection.js').getPool;
 
 beforeAll(async () => {
   const migrate = await import('../db/migrate.js');
@@ -23,6 +42,7 @@ beforeAll(async () => {
 
   runMigrations = migrate.runMigrations;
   closeDb = conn.closeDb;
+  getPool = conn.getPool;
   TaskService = taskMod.TaskService;
   TestService = testMod.TestService;
   ProjectRepository = projectMod.ProjectRepository;
@@ -36,16 +56,55 @@ afterAll(() => {
   closeDb();
 });
 
+// SAFETY: DO NOT add unscoped DELETE statements here. This suite connects to a
+// real Neon database when DATABASE_URL is loaded from .env.test during local test
+// execution. Cleanup is scoped to project IDs created in each test via the tracker
+// below, and runs in child→parent order (activity_log → tasks → epics → projects).
+const createdProjectIds: string[] = [];
+
 // Helper: create a project and epic, return their IDs
 async function createProjectAndEpic() {
   const projectRepo = new ProjectRepository();
   const epicRepo = new EpicRepository();
 
   const project = await projectRepo.create({ name: 'Test Project' });
+  createdProjectIds.push(project.id);
   const epic = await epicRepo.create({ project_id: project.id, title: 'Test Epic' });
 
   return { projectId: project.id, epicId: epic.id };
 }
+
+afterEach(async () => {
+  if (createdProjectIds.length === 0) return;
+  const ids = [...createdProjectIds];
+  // Transactional cleanup so a partial failure does not leave orphans.
+  // Child→parent ordering: activity_log → tasks → epics → projects.
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `DELETE FROM activity_log WHERE task_id IN (
+         SELECT id FROM tasks WHERE epic_id IN (
+           SELECT id FROM epics WHERE project_id = ANY($1::text[])
+         )
+       )`,
+      [ids],
+    );
+    await client.query(
+      'DELETE FROM tasks WHERE epic_id IN (SELECT id FROM epics WHERE project_id = ANY($1::text[]))',
+      [ids],
+    );
+    await client.query('DELETE FROM epics WHERE project_id = ANY($1::text[])', [ids]);
+    await client.query('DELETE FROM projects WHERE id = ANY($1::text[])', [ids]);
+    await client.query('COMMIT');
+    createdProjectIds.length = 0; // only clear tracker after commit succeeds
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+});
 
 // ──────────────────────────────────────────────
 // TaskService.create
