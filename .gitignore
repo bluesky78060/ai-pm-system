@@ -23,3 +23,7 @@ render-data-backup*
 .claude/active-ticket-fasttrack
 .claude/state/
 .claude/settings.local.json
+
+# Runtime/meta artifacts
+.agents/
+skills-lock.json
