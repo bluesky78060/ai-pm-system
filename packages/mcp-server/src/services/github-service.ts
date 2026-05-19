@@ -29,7 +29,7 @@ export class GitHubService {
    */
   async linkPrToTask(taskId: string, prUrl: string): Promise<{ task: Task; message: string }> {
     const task = await taskRepo.findById(taskId);
-    if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!task) { console.error(`[GitHubService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     const updated = await taskRepo.update(taskId, { github_pr: prUrl });
 
@@ -63,7 +63,7 @@ export class GitHubService {
     message: string;
   }> {
     const task = await taskRepo.findById(taskId);
-    if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!task) { console.error(`[GitHubService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     if (!task.github_pr) {
       return { task, pr: null, message: `'${task.title}'에 연결된 PR이 없습니다` };
@@ -129,10 +129,10 @@ export class GitHubService {
     labels?: string[],
   ): Promise<{ task: Task; issueUrl: string; issueNumber: number; message: string }> {
     const task = await taskRepo.findById(taskId);
-    if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!task) { console.error(`[GitHubService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     const project = await projectRepo.findById(projectId);
-    if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
+    if (!project) { console.error(`[GitHubService] Project not found: ${projectId}`); throw new Error('프로젝트를 찾을 수 없습니다'); }
     if (!project.github_repo) throw new Error(`프로젝트에 GitHub 저장소가 설정되지 않았습니다: ${project.name}`);
 
     const { owner, repo } = parseRepo(project.github_repo);
@@ -186,7 +186,7 @@ export class GitHubService {
     deletions?: number,
   ): Promise<{ task: Task; message: string }> {
     const task = await taskRepo.findById(taskId);
-    if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!task) { console.error(`[GitHubService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     const payload: Record<string, unknown> = { commitHash, notes };
     if (message !== undefined) payload.message = message;

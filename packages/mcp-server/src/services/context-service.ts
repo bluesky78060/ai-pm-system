@@ -26,7 +26,7 @@ export interface BlockingAnalysis {
 export class ContextService {
   async getSessionContext(projectId: string): Promise<SessionContext> {
     const project = await projectRepo.findById(projectId);
-    if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
+    if (!project) { console.error(`[ContextService] Project not found: ${projectId}`); throw new Error('프로젝트를 찾을 수 없습니다'); }
 
     const allTasks = await taskRepo.findAll({ project_id: projectId });
 
@@ -130,7 +130,7 @@ export class ContextService {
 
   async getProjectStatus(projectId: string): Promise<ProjectStatusOutput> {
     const project = await projectRepo.findById(projectId);
-    if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
+    if (!project) { console.error(`[ContextService] Project not found: ${projectId}`); throw new Error('프로젝트를 찾을 수 없습니다'); }
 
     const epics = await epicRepo.findByProject(projectId);
     const allTasks = await taskRepo.findAll({ project_id: projectId });

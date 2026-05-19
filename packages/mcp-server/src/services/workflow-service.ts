@@ -35,7 +35,7 @@ export class WorkflowService {
     message: string;
   }> {
     const found = await this.taskService.getById(taskId);
-    if (!found) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!found) { console.error(`[WorkflowService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     let task: Task;
     try {
@@ -96,7 +96,7 @@ export class WorkflowService {
     }
 
     const found = await this.taskService.getById(taskId);
-    if (!found) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!found) { console.error(`[WorkflowService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     let task = found;
 
@@ -197,7 +197,7 @@ export class WorkflowService {
     message: string;
   }> {
     const found = await this.taskService.getById(taskId);
-    if (!found) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!found) { console.error(`[WorkflowService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     const fixAttempts = await this.fixAttemptRepo.findByTask(found.id);
     const lastAttempt: FixAttempt | undefined = fixAttempts.length > 0 ? fixAttempts[0] : undefined;
@@ -242,7 +242,7 @@ export class WorkflowService {
     }
 
     const found = await this.taskService.getById(taskId);
-    if (!found) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!found) { console.error(`[WorkflowService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     let task: Task;
     try {
@@ -311,7 +311,7 @@ export class WorkflowService {
     }
 
     const found = await this.taskService.getById(taskId);
-    if (!found) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!found) { console.error(`[WorkflowService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     if (found.status !== 'review') {
       throw new Error(`review 상태의 태스크만 수정 요청할 수 있습니다. 현재 상태: ${found.status}`);

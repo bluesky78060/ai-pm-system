@@ -117,7 +117,8 @@ export class SearchService {
   async deleteSavedSearch(searchId: string): Promise<void> {
     const search = await savedSearchRepo.findById(searchId);
     if (!search) {
-      throw new Error(`저장된 검색을 찾을 수 없습니다: ${searchId}`);
+      console.error(`[SearchService] Saved search not found: ${searchId}`);
+      throw new Error('저장된 검색을 찾을 수 없습니다');
     }
     await savedSearchRepo.delete(searchId);
   }

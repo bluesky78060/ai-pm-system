@@ -49,7 +49,8 @@ export class ExportService {
     }
 
     if (!project) {
-      throw new Error(`프로젝트를 찾을 수 없습니다: ${projectIdOrCode}`);
+      console.error(`[ExportService] Project not found: ${projectIdOrCode}`);
+      throw new Error('프로젝트를 찾을 수 없습니다');
     }
 
     // Fetch all related data

@@ -18,7 +18,7 @@ async function resolveTask(idOrCode: string): Promise<Task> {
   } else {
     task = await taskRepo.findByTicketCode(idOrCode);
   }
-  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${idOrCode}`);
+  if (!task) { console.error(`[TaskService] Task not found: ${idOrCode}`); throw new Error('태스크를 찾을 수 없습니다'); }
   return task;
 }
 

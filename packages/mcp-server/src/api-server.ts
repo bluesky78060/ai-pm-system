@@ -20,6 +20,7 @@ import { AutoAssignmentService } from './services/auto-assignment-service.js';
 import { SearchService } from './services/search-service.js';
 import { TemplateService } from './services/template-service.js';
 import { ExportService } from './services/export-service.js';
+import { apiKeyAuth } from './middleware/auth.js';
 
 await runMigrations();
 
@@ -71,8 +72,16 @@ const templateService = new TemplateService();
 const exportService = new ExportService();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()) ?? ['http://localhost:3000'],
+}));
 app.use(express.json());
+
+// Health check — unauthenticated
+app.get('/health', (_req, res) => { res.json({ status: 'ok' }); });
+
+// All /api routes require API key
+app.use('/api', apiKeyAuth);
 
 // Helper: map error message to HTTP status code
 function getErrorStatus(msg: string): number {
@@ -103,7 +112,7 @@ app.post('/api/projects', wrapAsync(async (req) => projectService.create(req.bod
 
 app.get('/api/projects/:id', wrapAsync(async (req) => {
   const project = await projectService.getById(req.params.id as string);
-  if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${req.params.id as string}`);
+  if (!project) { console.error(`[API] Project not found: ${req.params.id as string}`); throw new Error('프로젝트를 찾을 수 없습니다'); }
   const epics = await projectService.getEpics(project.id);
   return { project, epics };
 }));
@@ -147,7 +156,7 @@ app.post('/api/tasks/search', wrapAsync(async (req) => {
 
 app.get('/api/tasks/:id', wrapAsync(async (req) => {
   const task = await taskService.getById(req.params.id as string);
-  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${req.params.id as string}`);
+  if (!task) { console.error(`[API] Task not found: ${req.params.id as string}`); throw new Error('태스크를 찾을 수 없습니다'); }
   const subtasks = await taskService.getSubtasks(task.id);
   return { task, subtasks };
 }));
@@ -170,7 +179,7 @@ app.get('/api/tasks/:id/assignee-suggestion', wrapAsync(async (req) =>
 
 app.patch('/api/tasks/:id', wrapAsync(async (req) => {
   const task = await taskService.getById(req.params.id as string);
-  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${req.params.id as string}`);
+  if (!task) { console.error(`[API] Task not found: ${req.params.id as string}`); throw new Error('태스크를 찾을 수 없습니다'); }
   return taskService.update(req.params.id as string, req.body);
 }));
 
@@ -184,7 +193,7 @@ app.post('/api/tasks/:id/dependencies', wrapAsync(async (req) =>
 
 app.delete('/api/tasks/:id', wrapAsync(async (req) => {
   const task = await taskService.getById(req.params.id as string);
-  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${req.params.id as string}`);
+  if (!task) { console.error(`[API] Task not found: ${req.params.id as string}`); throw new Error('태스크를 찾을 수 없습니다'); }
   await taskService.delete(req.params.id as string);
   return { message: `태스크 '${task.title}' 삭제됨` };
 }));
@@ -213,13 +222,13 @@ app.post('/api/tasks/:id/escalate', wrapAsync(async (req) =>
 // === Time tracking routes ===
 app.get('/api/tasks/:id/time-entries', wrapAsync(async (req) => {
   const task = await taskService.getById(req.params.id as string);
-  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${req.params.id}`);
+  if (!task) { console.error(`[API] Task not found: ${req.params.id}`); throw new Error('태스크를 찾을 수 없습니다'); }
   return { time_entries: await timeTrackingService.getTimeEntries(task.id) };
 }));
 
 app.get('/api/tasks/:id/time-summary', wrapAsync(async (req) => {
   const task = await taskService.getById(req.params.id as string);
-  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${req.params.id}`);
+  if (!task) { console.error(`[API] Task not found: ${req.params.id}`); throw new Error('태스크를 찾을 수 없습니다'); }
   return { summary: await timeTrackingService.getTimeSummary(task.id) };
 }));
 
@@ -428,7 +437,7 @@ app.post('/api/templates/:id/apply', wrapAsync(async (req) =>
 app.post('/api/tasks/:id/seed-activities', wrapAsync(async (req) => {
   const taskId = req.params.id as string;
   const task = await taskService.getById(taskId);
-  if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+  if (!task) { console.error(`[API] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
   // Check existing activities to avoid duplicates
   const existing = await activityRepo.findByTask(taskId, 1);

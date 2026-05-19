@@ -76,7 +76,7 @@ export class AnalysisService {
   // -------------------------------------------------------------------------
   async dailyReport(projectId: string): Promise<DailyReport> {
     const project = await projectRepo.findById(projectId);
-    if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
+    if (!project) { console.error(`[AnalysisService] Project not found: ${projectId}`); throw new Error('프로젝트를 찾을 수 없습니다'); }
 
     // Today's date string in UTC (YYYY-MM-DD)
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -134,7 +134,7 @@ export class AnalysisService {
   // -------------------------------------------------------------------------
   async bottleneck(projectId: string): Promise<BottleneckAnalysis> {
     const project = await projectRepo.findById(projectId);
-    if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
+    if (!project) { console.error(`[AnalysisService] Project not found: ${projectId}`); throw new Error('프로젝트를 찾을 수 없습니다'); }
 
     const allTasks = await taskRepo.findAll({ project_id: projectId });
     const now = new Date();
@@ -214,7 +214,7 @@ export class AnalysisService {
   // -------------------------------------------------------------------------
   async velocity(projectId: string): Promise<VelocityReport> {
     const project = await projectRepo.findById(projectId);
-    if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${projectId}`);
+    if (!project) { console.error(`[AnalysisService] Project not found: ${projectId}`); throw new Error('프로젝트를 찾을 수 없습니다'); }
 
     const allTasks = await taskRepo.findAll({ project_id: projectId });
 

@@ -21,7 +21,7 @@ export class TestService {
     results: { test_type: string; status: string; output?: string; failures?: string; duration_ms?: number }[],
   ): Promise<{ runNumber: number; results: TestRun[]; summary: { pass: number; fail: number; skip: number }; message: string }> {
     const task = await taskRepo.findById(taskId);
-    if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!task) { console.error(`[TestService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     const runNumber = await testRunRepo.getLatestRunNumber(taskId) + 1;
     const created: TestRun[] = [];
@@ -78,7 +78,7 @@ export class TestService {
     failureDetails?: { file?: string; line?: number; message: string }[],
   ): Promise<{ task: Task; action: string; message: string }> {
     const task = await taskRepo.findById(taskId);
-    if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!task) { console.error(`[TestService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     if (overallStatus === 'pass') {
       // Move to review
@@ -135,7 +135,7 @@ export class TestService {
     filesChanged?: { path: string; diff?: string }[],
   ): Promise<{ fixTask: Task; fixAttempt: FixAttempt; message: string }> {
     const parentTask = await taskRepo.findById(parentTaskId);
-    if (!parentTask) throw new Error(`태스크를 찾을 수 없습니다: ${parentTaskId}`);
+    if (!parentTask) { console.error(`[TestService] Parent task not found: ${parentTaskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     const attemptNumber = await fixAttemptRepo.getLatestAttemptNumber(parentTaskId) + 1;
     if (attemptNumber > MAX_FIX_ATTEMPTS) {
@@ -191,7 +191,7 @@ export class TestService {
     summary: { totalRuns: number; totalFixes: number; lastResult: string | null };
   }> {
     const task = await taskRepo.findById(taskId);
-    if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!task) { console.error(`[TestService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     const testRuns = await testRunRepo.findByTask(taskId);
     const fixAttempts = await fixAttemptRepo.findByTask(taskId);
@@ -218,7 +218,7 @@ export class TestService {
     reason: string,
   ): Promise<{ task: Task; message: string }> {
     const task = await taskRepo.findById(taskId);
-    if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+    if (!task) { console.error(`[TestService] Task not found: ${taskId}`); throw new Error('태스크를 찾을 수 없습니다'); }
 
     const attempts = await fixAttemptRepo.getLatestAttemptNumber(taskId);
 

@@ -84,7 +84,8 @@ export class TemplateService {
   ): Promise<{ task: any; subtasks: any[] }> {
     const template = await this.getById(templateId);
     if (!template) {
-      throw new Error(`템플릿을 찾을 수 없습니다: ${templateId}`);
+      console.error(`[TemplateService] Template not found: ${templateId}`);
+      throw new Error('템플릿을 찾을 수 없습니다');
     }
 
     // Create main task from template
