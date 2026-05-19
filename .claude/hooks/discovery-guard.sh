@@ -49,7 +49,7 @@ if [[ -f "$TICKET_FILE" ]]; then
       cat >&2 <<EOF
 [Discovery Guard] 활성 티켓 ($TICKET)에 대한 Discovery 산출물이 없습니다!
 
-기대 파일: docs/00-discovery/${TICKET}-direction.md
+기대 파일: docs/00-discovery/${TICKET}-direction.* (.md 또는 .html)
 
 먼저 해당 티켓에 대한 Discovery Q&A를 완료하세요.
 EOF

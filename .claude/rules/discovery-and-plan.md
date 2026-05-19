@@ -79,6 +79,21 @@ mcp__ai-pm__research_with_gemini({
 - **선결 조건**: 3단계 Discovery 산출물(`docs/00-discovery/`) 존재 필수
 - planner/executor 에이전트로 플랜 작성 (`docs/01-plan/` 저장)
 
+### 플랜 문서 형식 (MD 기본 · HTML 선택)
+
+- **기본**: 마크다운(`.md`) — 모든 기존 플랜 형식
+- **선택**: HTML(`.html`) — Thariq Shihipar (Anthropic) "Unreasonable Effectiveness of HTML" + Karpathy 진화 경로 노선. 시각 자산(표·배지·진행률·반응형) 필요한 플랜에 권장 (APS-2-6 파일럿 결과 참고)
+- **선택 기준**:
+  - MD → 텍스트 위주 단순 플랜, fast-track, 짧은 정책 변경
+  - HTML → 복잡 다중 Phase, 비교표 다수, 외부 디바이스(iPad 등)에서도 검토 필요한 경우
+- **HTML 작성 보안 정책** (필수 준수):
+  - `<script>` 태그·`on*` 이벤트 핸들러·`javascript:` URL 금지 (inline JS 금지)
+  - 외부 CDN 금지 (스타일·폰트·이미지 inline 또는 system font만)
+  - 외부 이미지 금지 (필요 시 SVG inline)
+  - 한 줄당 1 요소 원칙 (git diff 가독성 보존)
+- **템플릿**: `.claude/templates/plan-template.html`
+- Hook 호환: `discovery-guard.sh`·`plan-review-guard.sh`·`codex-review-guard.sh`는 확장자 무관 ticket-id 매칭이라 `.md`/`.html` 모두 통과 (APS-2-6에서 검증)
+
 ### 플랜 문서 필수 포함 항목
 
 - 기능 명세: `F-001`, 우선순위 `P0(필수)/P1(중요)/P2(선택)`, 엣지케이스
@@ -86,13 +101,25 @@ mcp__ai-pm__research_with_gemini({
 - **Discovery 결과 반영 섹션**: 3단계에서 확정된 방향성을 어떻게 충족하는지 매핑
 - **Superpowers 가이드 적용**: 신참 엔지니어 가정으로 작성 (파일 경로·테스트 방법·DRY/YAGNI/TDD 명시)
 
-## 5단계: 플랜 리뷰 → 메인 오케스트레이터 승인
+## 5단계: 플랜 리뷰 → 메인 오케스트레이터 자체 검토 후 즉시 다음 단계 진행
 
 - **목적**: 작성된 플랜의 품질·실현가능성·방향성 일치도를 다각도로 검증
-- **수행 주체** (작성자와 분리된 별도 패스로 진행, self-approval 금지):
-  - 1차: `critic` 에이전트(Opus) 또는 `/oh-my-claudecode:review` 스킬로 독립 리뷰
-  - 2차: 메인 오케스트레이터(Claude) 직접 검토 및 최종 승인
+- **수행 주체** (작성자와 분리된 별도 패스로 진행):
+  - 1차: `critic` 에이전트(Opus) 또는 `/oh-my-claudecode:review` 스킬로 **독립 리뷰** (self-approval 회피는 이 1차 분리로 충족)
+  - 2차: **메인 오케스트레이터(Claude 본인) 자체 검토 후 즉시 6단계로 진행** — 사용자 승인 대기 단계가 아님
   - 선택: `plan-eng-review`(아키텍처) / `plan-design-review`(UI) / `plan-ceo-review`(스코프) / `plan-devex-review`(DX) 추가 적용
+
+### ⚠ 자주 발생하는 silent-stop 패턴 (금지)
+
+`continuous-execution.md` 위반 사례. **특정 문구를 출력했는지 여부가 아니라 "멈추는 행동 자체"가 문제**임에 유의:
+
+- ❌ critic 1차 리뷰 결과 받고 **그냥 turn 종료** (질문도 안 했지만 다음 도구 호출 없음)
+- ❌ critic 결과만 요약 보고하고 "다음 단계 진행할까요?" 묻고 종료
+- ❌ "메인 오케스트레이터 승인 대기" 같은 표현으로 멈춤 (자기 자신이 오케스트레이터인데 누구를 기다리는가)
+- ❌ 5단계 = 사용자 승인 게이트로 오해 (사용자 승인은 3단계 Discovery '방향 확정' 한 번으로 충분)
+- ✅ critic 결과 종합 + 체크리스트 통과 판정 + **같은 응답 안에 6단계 도구 호출까지 포함**
+
+5단계는 사용자 인터랙션 없는 내부 검증 단계. critic 결과 보고 후 멈추면 **문구 출력 여부와 무관하게 silent-stop**. **단, CRITICAL 결함 발견 시는 `continuous-execution.md`의 4가지 예외 보고 절차 적용**.
 
 ### 리뷰 체크리스트 (모든 항목 통과 시에만 승인)
 
@@ -111,4 +138,4 @@ mcp__ai-pm__research_with_gemini({
 - 승인 시 → 다음 단계 진행
 - 반려 시 → 플랜 수정 후 재리뷰 (구현 절대 불가), **최대 3회**
 - 3회 반려 시 → Discovery 단계로 회귀하여 방향 재확인
-- **승인 없이 start_work 및 코드 작성 시작 금지**
+- **플랜 리뷰 산출물(`docs/02-review/`) 및 메인 오케스트레이터 자체 검토(체크리스트 7개 통과) 없이 start_work 및 코드 작성 시작 금지** — 여기서 "승인"은 사용자 승인이 아니라 메인 오케스트레이터의 자체 검토 통과를 의미

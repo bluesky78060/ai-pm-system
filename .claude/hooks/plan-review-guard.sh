@@ -82,13 +82,13 @@ fi
 if [[ -n "$TICKET" ]]; then
   TICKET_MISSING=()
   if ! ls "$DISCOVERY_DIR" 2>/dev/null | grep -q "$TICKET"; then
-    TICKET_MISSING+=("docs/00-discovery/${TICKET}-*.md")
+    TICKET_MISSING+=("docs/00-discovery/${TICKET}-* (.md 또는 .html)")
   fi
   if ! ls "$PLAN_DIR" 2>/dev/null | grep -q "$TICKET"; then
-    TICKET_MISSING+=("docs/01-plan/${TICKET}-*.md")
+    TICKET_MISSING+=("docs/01-plan/${TICKET}-* (.md 또는 .html)")
   fi
   if ! ls "$REVIEW_DIR" 2>/dev/null | grep -q "$TICKET"; then
-    TICKET_MISSING+=("docs/02-review/${TICKET}-plan-review.md")
+    TICKET_MISSING+=("docs/02-review/${TICKET}-plan-review.* (.md 또는 .html)")
   fi
   if [[ ${#TICKET_MISSING[@]} -gt 0 ]]; then
     echo "[Plan-Review Guard] 활성 티켓 ($TICKET)에 대한 산출물 누락:" >&2

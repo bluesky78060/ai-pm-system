@@ -48,7 +48,7 @@ if [[ -n "$TICKET" ]]; then
   REVIEW_FILE=$(ls "$REVIEW_DIR" 2>/dev/null | grep "$TICKET" | head -1)
   if [[ -z "$REVIEW_FILE" ]]; then
     echo "[Code-Review Guard] 활성 티켓 ($TICKET)에 대한 리뷰 산출물 없음" >&2
-    echo "기대: docs/03-code-review/${TICKET}-review.md" >&2
+    echo "기대: docs/03-code-review/${TICKET}-review.* (.md 또는 .html)" >&2
     exit 2
   fi
   REVIEW_PATH="$REVIEW_DIR/$REVIEW_FILE"

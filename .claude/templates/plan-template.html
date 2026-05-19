@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<!--
+  HTML 플랜 표준 템플릿 (APS-2-6 파일럿 산출물)
+  사용법은 .claude/templates/README-plan-template.md 참조
+  (HTML 중첩 주석 파싱 버그 방지를 위해 본 주석은 메타데이터만 보유)
+-->
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>{{TICKET}} · {{TITLE}}</title>
+<meta name="ticket" content="{{TICKET}}">
+<meta name="classification" content="{{1중/2중/3중 검증}}">
+<style>
+  :root {
+    --bg: #fafaf9;
+    --fg: #1f1f1f;
+    --muted: #6b7280;
+    --accent: #c2410c;
+    --accent-soft: #fed7aa;
+    --ok: #166534;
+    --ok-soft: #bbf7d0;
+    --warn: #92400e;
+    --warn-soft: #fef3c7;
+    --danger: #991b1b;
+    --danger-soft: #fecaca;
+    --code-bg: #f5f5f4;
+    --border: #d6d3d1;
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 15px; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+    line-height: 1.65;
+    color: var(--fg);
+    background: var(--bg);
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+  header {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  header h1 {
+    margin: 0 0 0.4rem;
+    font-size: 1.6rem;
+    color: var(--accent);
+  }
+  header .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    font-size: 0.75rem;
+    border-radius: 99px;
+    font-weight: 600;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .badge.danger { background: var(--danger-soft); color: var(--danger); }
+  .badge.muted { background: #e7e5e4; color: var(--muted); }
+
+  nav.toc {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+  }
+  nav.toc h2 {
+    margin: 0 0 0.5rem;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  nav.toc ol {
+    margin: 0;
+    padding-left: 1.2rem;
+    columns: 2;
+    column-gap: 1.5rem;
+  }
+  nav.toc a { color: var(--fg); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); text-decoration: underline; }
+
+  section { margin-bottom: 2rem; }
+  section h2 {
+    margin: 0 0 0.75rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 1.2rem;
+  }
+  section h3 {
+    margin: 1rem 0 0.4rem;
+    font-size: 1rem;
+    color: var(--accent);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5rem 0 1rem;
+    font-size: 0.92rem;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 0.5rem 0.7rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #f5f5f4;
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  tbody tr:nth-child(odd) { background: #fdfdfc; }
+
+  code, pre {
+    font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+    background: var(--code-bg);
+    border-radius: 4px;
+    font-size: 0.88em;
+  }
+  code { padding: 0.1rem 0.35rem; }
+  pre {
+    padding: 0.8rem 1rem;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    line-height: 1.5;
+  }
+  pre code { padding: 0; background: transparent; }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.9rem 1.1rem;
+  }
+  .card h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.95rem;
+    color: var(--accent);
+  }
+
+  .phase {
+    border-left: 3px solid var(--accent);
+    padding: 0.3rem 0 0.3rem 1rem;
+    margin-bottom: 1rem;
+  }
+  .phase strong { color: var(--accent); }
+
+  ul.checklist { list-style: none; padding-left: 0; }
+  ul.checklist li {
+    padding: 0.2rem 0 0.2rem 1.7rem;
+    position: relative;
+  }
+  ul.checklist li::before {
+    content: "☐";
+    position: absolute;
+    left: 0;
+    color: var(--muted);
+    font-size: 1.1rem;
+    top: 0;
+  }
+  ul.checklist li.done::before { content: "☑"; color: var(--ok); }
+
+  footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+
+  @media (max-width: 640px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    nav.toc ol { columns: 1; }
+  }
+
+  @media print {
+    body { max-width: none; padding: 1rem; }
+    nav.toc { break-inside: avoid; }
+    section { break-inside: avoid-page; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>{{TICKET}} · {{TITLE}}</h1>
+  <p style="margin:0;color:var(--muted);">{{한 줄 부제 — 작업 배경/근거}}</p>
+  <div class="meta">
+    <span class="badge">분류: {{1중/2중/3중 검증}}</span>
+    <span class="badge ok">티켓 P{{N}}</span>
+    <span class="badge warn">{{상태/특이사항}}</span>
+    <span class="badge muted">담당: {{ai / human / username}}</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <h2>목차</h2>
+  <ol>
+    <li><a href="#summary">요약</a></li>
+    <li><a href="#features">기능 명세</a></li>
+    <li><a href="#tech">기술 결정</a></li>
+    <li><a href="#roadmap">구현 로드맵</a></li>
+    <li><a href="#discovery">Discovery 매핑</a></li>
+    <li><a href="#tests">테스트 전략</a></li>
+    <li><a href="#risks">예외 처리</a></li>
+    <li><a href="#dod">DoD</a></li>
+  </ol>
+</nav>
+
+<section id="summary">
+  <h2>1. 요약</h2>
+  <p><!-- 2~3 단락. 문제·해결책·범위 핵심을 압축 --></p>
+  <div class="grid-2">
+    <div class="card">
+      <h4>변경 범위</h4>
+      <ul style="margin:0;padding-left:1.2rem;">
+        <li><!-- 산출물 1 --></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>비목표</h4>
+      <ul style="margin:0;padding-left:1.2rem;">
+        <li><!-- 의도적 제외 항목 --></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <h2>2. 기능 명세</h2>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>기능</th><th>P</th><th>설명</th><th>엣지케이스</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>F-001</code></td>
+        <td><!-- 기능명 --></td>
+        <td><span class="badge">P0</span></td>
+        <td><!-- 상세 설명 --></td>
+        <td><!-- 엣지케이스 --></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="tech">
+  <h2>3. 기술 결정</h2>
+  <h3>3-1. 스택·라이브러리</h3>
+  <p><!-- 선택한 기술 + 근거 --></p>
+  <h3>3-2. 보안 정책</h3>
+  <ul>
+    <li><!-- 보안 항목 (외부 통합 시 _security-base 활용 명시) --></li>
+  </ul>
+</section>
+
+<section id="roadmap">
+  <h2>4. 구현 로드맵</h2>
+  <div class="phase">
+    <strong>Phase 1 — {{단계명}}</strong>
+    <ul>
+      <li><!-- 작업 항목 --></li>
+    </ul>
+  </div>
+  <div class="phase">
+    <strong>Phase 2 — {{단계명}}</strong>
+    <ul>
+      <li><!-- 작업 항목 --></li>
+    </ul>
+  </div>
+</section>
+
+<section id="discovery">
+  <h2>5. Discovery 매핑</h2>
+  <table>
+    <thead><tr><th>Discovery 카테고리</th><th>플랜 반영</th></tr></thead>
+    <tbody>
+      <tr><td>목표 (Why)</td><td><!-- 매핑 --></td></tr>
+      <tr><td>사용자 (Who)</td><td><!-- 매핑 --></td></tr>
+      <tr><td>범위 (What)</td><td><!-- 매핑 --></td></tr>
+      <tr><td>제약 (Constraints)</td><td><!-- 매핑 --></td></tr>
+      <tr><td>우선순위 (Priority)</td><td><!-- 매핑 --></td></tr>
+      <tr><td>리스크 (Risk)</td><td><!-- 매핑 --></td></tr>
+      <tr><td>검증 (Verify)</td><td><!-- 매핑 --></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="tests">
+  <h2>6. 테스트 전략</h2>
+  <table>
+    <thead><tr><th>테스트</th><th>방법</th><th>통과 조건</th></tr></thead>
+    <tbody>
+      <tr><td><!-- 항목 --></td><td><code><!-- 명령 --></code></td><td><!-- 조건 --></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="risks">
+  <h2>7. 예외 처리 / 리스크 대응</h2>
+  <table>
+    <thead><tr><th>리스크</th><th>확률</th><th>영향</th><th>대응</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><!-- 리스크 --></td>
+        <td><span class="badge ok">저</span></td>
+        <td><span class="badge warn">중</span></td>
+        <td><!-- 대응 --></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="dod">
+  <h2>8. Definition of Done</h2>
+  <ul class="checklist">
+    <li><!-- 검증 가능 항목 1 --></li>
+    <li><!-- 검증 가능 항목 2 --></li>
+  </ul>
+</section>
+
+<footer>
+  생성: {{YYYY-MM-DD}} · {{담당자}} · inline CSS only, JS 없음, 외부 의존 0
+</footer>
+
+</body>
+</html>
