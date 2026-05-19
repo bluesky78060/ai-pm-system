@@ -5,8 +5,8 @@ export interface TimeEntry {
   id: string;
   task_id: string;
   status: string;
-  started_at: Date;
-  ended_at: Date | null;
+  started_at: string; // APS-5-10: pg type parser returns ISO string, not Date object
+  ended_at: string | null; // APS-5-10: same
   duration_seconds: number | null;
   notes: string | null;
 }
