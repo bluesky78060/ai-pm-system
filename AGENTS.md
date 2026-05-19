@@ -9,7 +9,7 @@
 
 - **프로젝트명**: AI PM System
 - **프로젝트 코드**: `APS`
-- **프로젝트 ID**: `9fe805f8-15d6-4d67-804f-b14f57e13616`
+- **프로젝트 ID**: `3bc28444-2e96-4587-be23-4c48e220aa66`
 - **목적**: AI 에이전트 기반 프로젝트 관리 시스템 (MCP 서버 + 웹 UI)
 
 ## 핵심 원칙
@@ -34,11 +34,11 @@
 
 ```bash
 # 1. 현재 에픽 확인
-get_project_status(project_id="9fe805f8-15d6-4d67-804f-b14f57e13616")
+get_project_status(project_id="3bc28444-2e96-4587-be23-4c48e220aa66")
 
 # 2. 티켓 생성 (epic_id 필수)
 create_task(
-  project_id="9fe805f8-15d6-4d67-804f-b14f57e13616",
+  project_id="3bc28444-2e96-4587-be23-4c48e220aa66",
   title="작업 제목",
   description="작업 설명",
   epic_id="<epic-id>",  # 필수!
@@ -365,7 +365,7 @@ smart_workflow(task_id="APS-X-Y", action="submit_test", test_results=[...])
 
 대화가 컴팩션된 후 다음을 확인하세요:
 
-- [ ] 프로젝트 ID: `9fe805f8-15d6-4d67-804f-b14f57e13616`
+- [ ] 프로젝트 ID: `3bc28444-2e96-4587-be23-4c48e220aa66`
 - [ ] 티켓 기반 개발 규칙 인지
 - [ ] `smart_workflow` 사용 규칙 인지
 - [ ] 에이전트 위임 필수 인지

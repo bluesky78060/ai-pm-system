@@ -126,7 +126,7 @@ const analysis = await mcp.call_tool("analyze_task_priority", {
 
 // 프로젝트 전체 제안
 const suggestions = await mcp.call_tool("get_priority_suggestions", {
-  project_id: "9fe805f8-15d6-4d67-804f-b14f57e13616"
+  project_id: "3bc28444-2e96-4587-be23-4c48e220aa66"
 });
 ```
 
@@ -136,7 +136,7 @@ const suggestions = await mcp.call_tool("get_priority_suggestions", {
 curl http://localhost:3001/api/tasks/APS-1-8/priority-analysis
 
 # 프로젝트 전체 제안
-curl http://localhost:3001/api/projects/9fe805f8-15d6-4d67-804f-b14f57e13616/priority-suggestions
+curl http://localhost:3001/api/projects/3bc28444-2e96-4587-be23-4c48e220aa66/priority-suggestions
 ```
 
 ## 빌드 및 테스트 결과
