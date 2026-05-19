@@ -1,4 +1,12 @@
 import { defineConfig } from 'vitest/config';
+import { config as loadDotenv } from 'dotenv';
+import { resolve } from 'node:path';
+
+// APS-2-7: load test-only DATABASE_URL from the repo-root .env.test BEFORE any
+// test file imports trigger getPool(). Falls back silently when the file is
+// absent (CI sets DATABASE_URL directly via secrets), but the guard in
+// context-service.test.ts still refuses to run against a production URL.
+loadDotenv({ path: resolve(__dirname, '../../.env.test') });
 
 export default defineConfig({
   test: {

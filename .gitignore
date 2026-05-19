@@ -4,7 +4,14 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 .env
+.env.test
+.env.test.local
 *.log
+
+# SQL backups (HIGH: prod data exposure if committed) — APS-2-7
+*.sql
+backup-render-*
+render-data-backup*
 .DS_Store
 .mcp.json
 .playwright-mcp/
@@ -13,4 +20,5 @@ data/*.db-shm
 .omc/
 .claude/active-ticket
 .claude/active-ticket-fasttrack
+.claude/state/
 .claude/settings.local.json

@@ -36,12 +36,14 @@ export class ContextService {
     const blocked = allTasks.filter((t) => t.status === 'blocked');
 
     // Recently completed (status='done', limit 5, most recent first)
+    // pg driver returns timestamp columns as Date objects despite the `string` type
+    // declaration on entities — compare via Date.getTime() to handle both shapes safely.
     const doneTasks = allTasks
       .filter((t) => t.status === 'done')
       .sort((a, b) => {
-        const aTime = a.completed_at ?? a.created_at;
-        const bTime = b.completed_at ?? b.created_at;
-        return bTime.localeCompare(aTime);
+        const aTime = new Date(a.completed_at ?? a.created_at).getTime();
+        const bTime = new Date(b.completed_at ?? b.created_at).getTime();
+        return bTime - aTime;
       })
       .slice(0, 5);
 
