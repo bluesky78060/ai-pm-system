@@ -64,7 +64,12 @@ if [[ -n "$TICKET" ]]; then
   # 정책 근거: .claude/rules/code-review.md (3단계 분류)
 
   # 보안 관련 (인증/세션/암호화) — 3중 강제
-  if echo "$CHANGED_FILES" | grep -qE "(auth|session|crypto|password|token|jwt|oauth)" ; then
+  # APS-5-2: 경로 기반 정확 매칭으로 변경.
+  # 변경 전: 파일명에 auth|session 등 키워드 단순 grep → false positive 발생
+  #   (예: .claude/hooks/session-start.sh 같은 비보안 파일도 차단)
+  # 변경 후: 실제 인증/보안 코드가 위치하는 경로 패턴만 매칭.
+  # 알려진 한계: 다른 디렉토리에 auth 코드를 추가하면 미감지(false negative) 가능.
+  if echo "$CHANGED_FILES" | grep -qE "(packages/mcp-server/src/(auth|middleware|crypto)/|/(auth|crypto)-[^/]+\.(ts|js|sh)$)"; then
     IS_CRITICAL=1
     CRITICAL_REASONS+=("보안 관련 파일 변경")
   fi
