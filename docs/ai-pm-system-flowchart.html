@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI PM System — 플로우차트</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2333;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --amber: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --pink: #f778ba;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    padding: 32px 24px 20px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #161b22 0%, #0d1117 100%);
+  }
+  header h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.4px; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  .badges { margin-top: 14px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .badge {
+    font-size: 12px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--muted);
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 80px; }
+
+  /* CSS-only tabs */
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 24px; justify-content: center; }
+  .tabs input { position: absolute; opacity: 0; pointer-events: none; }
+  .tab-label {
+    cursor: pointer; padding: 9px 16px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--muted);
+    font-size: 14px; font-weight: 600; transition: all .15s ease;
+  }
+  .tab-label:hover { border-color: var(--accent); color: var(--text); }
+  #tab1:checked ~ .tabs label[for="tab1"],
+  #tab2:checked ~ .tabs label[for="tab2"],
+  #tab3:checked ~ .tabs label[for="tab3"] {
+    background: var(--accent); color: #0d1117; border-color: var(--accent);
+  }
+  .panel { display: none; animation: fade .25s ease; }
+  #tab1:checked ~ #panel1,
+  #tab2:checked ~ #panel2,
+  #tab3:checked ~ #panel3 { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  h2.section-title { font-size: 20px; margin: 0 0 4px; }
+  p.section-sub { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+
+  /* Flow steps */
+  .flow { display: flex; flex-direction: column; gap: 0; }
+  .node {
+    border: 1px solid var(--border); background: var(--panel);
+    border-radius: var(--radius); padding: 16px 18px;
+    position: relative;
+  }
+  .node .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent); color: #0d1117; font-weight: 700; font-size: 13px;
+    margin-right: 10px; flex-shrink: 0;
+  }
+  .node .head { display: flex; align-items: center; margin-bottom: 6px; }
+  .node .head .title { font-weight: 700; font-size: 15px; }
+  .node .desc { color: var(--muted); font-size: 13.5px; margin-left: 36px; }
+  .node code {
+    background: var(--panel-2); border: 1px solid var(--border);
+    padding: 1px 6px; border-radius: 5px; font-size: 12.5px; color: var(--accent);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .node .meta { margin-left: 36px; margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 11.5px; padding: 2px 8px; border-radius: 6px; border: 1px solid transparent; }
+  .chip.hook { background: rgba(248,81,73,.12); color: var(--red); border-color: rgba(248,81,73,.3); }
+  .chip.out { background: rgba(63,185,80,.12); color: var(--green); border-color: rgba(63,185,80,.3); }
+  .chip.opt { background: rgba(188,140,255,.12); color: var(--purple); border-color: rgba(188,140,255,.3); }
+  .chip.gate { background: rgba(210,153,34,.12); color: var(--amber); border-color: rgba(210,153,34,.3); }
+  .arrow {
+    width: 2px; height: 22px; background: var(--border); margin: 0 auto;
+    position: relative;
+  }
+  .arrow::after {
+    content: ""; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    border-left: 5px solid transparent; border-right: 5px solid transparent;
+    border-top: 6px solid var(--border);
+  }
+  .branch {
+    margin-left: 36px; margin-top: 10px; padding: 10px 12px;
+    border-left: 2px solid var(--purple); background: var(--panel-2);
+    border-radius: 0 8px 8px 0; font-size: 13px; color: var(--muted);
+  }
+  .branch b { color: var(--purple); }
+
+  /* Architecture layers */
+  .layer {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; margin-bottom: 0; background: var(--panel);
+  }
+  .layer .layer-name { font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 12px; }
+  .boxes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .box {
+    flex: 1 1 160px; min-width: 150px; border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px; background: var(--panel-2);
+  }
+  .box .b-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .box .b-title.acc { color: var(--accent); }
+  .box .b-title.grn { color: var(--green); }
+  .box .b-title.pur { color: var(--purple); }
+  .box .b-title.pnk { color: var(--pink); }
+  .box .b-title.amb { color: var(--amber); }
+  .box .b-sub { font-size: 12.5px; color: var(--muted); }
+  .box .b-sub code { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--accent); }
+
+  /* State machine */
+  .sm { display: flex; flex-direction: column; align-items: center; gap: 0; }
+  .state {
+    border: 1px solid var(--border); border-radius: 999px; padding: 10px 22px;
+    background: var(--panel); font-weight: 700; font-size: 14px; text-align: center;
+    min-width: 150px;
+  }
+  .state.start { border-color: var(--muted); color: var(--muted); }
+  .state.work { border-color: var(--accent); color: var(--accent); }
+  .state.test { border-color: var(--amber); color: var(--amber); }
+  .state.rev { border-color: var(--purple); color: var(--purple); }
+  .state.done { border-color: var(--green); color: var(--green); background: rgba(63,185,80,.08); }
+  .transition {
+    display: flex; flex-direction: column; align-items: center;
+    height: 50px; justify-content: center; position: relative;
+  }
+  .transition .lbl {
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    padding: 2px 9px; border-radius: 6px; color: var(--accent); margin-bottom: 2px;
+  }
+  .transition .line { width: 2px; flex: 1; background: var(--border); }
+  .transition::after {
+    content: "▼"; color: var(--border); font-size: 11px; line-height: 1;
+  }
+  .sm-note {
+    margin-top: 20px; border: 1px solid var(--border); border-left: 3px solid var(--amber);
+    border-radius: 0 8px 8px 0; padding: 12px 16px; background: var(--panel);
+    font-size: 13px; color: var(--muted); width: 100%;
+  }
+  .sm-note b { color: var(--text); }
+  .backtrack {
+    border: 1px dashed var(--red); border-radius: 8px; padding: 10px 16px;
+    margin-top: 16px; font-size: 13px; color: var(--red); background: rgba(248,81,73,.06);
+    width: 100%; text-align: center;
+  }
+  .backtrack code { color: var(--red); }
+
+  .legend { margin-top: 28px; display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 24px; border-top: 1px solid var(--border); }
+  footer code { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>AI PM System — 프로젝트 플로우차트</h1>
+  <p>MCP 기반 AI 자율 프로젝트 관리 시스템 · 프로젝트 코드 <code style="color:#58a6ff">APS</code></p>
+  <div class="badges">
+    <span class="badge">pnpm monorepo</span>
+    <span class="badge">TypeScript · Node.js</span>
+    <span class="badge">React 19 · Vite 6</span>
+    <span class="badge">PostgreSQL (Neon)</span>
+    <span class="badge">Render Deploy</span>
+  </div>
+</header>
+
+<main>
+  <input type="radio" name="tab" id="tab1" checked>
+  <input type="radio" name="tab" id="tab2">
+  <input type="radio" name="tab" id="tab3">
+
+  <div class="tabs">
+    <label class="tab-label" for="tab1">① 개발 워크플로우 10단계</label>
+    <label class="tab-label" for="tab2">② 시스템 아키텍처</label>
+    <label class="tab-label" for="tab3">③ smart_workflow 상태 머신</label>
+  </div>
+
+  <!-- ============ PANEL 1: WORKFLOW ============ -->
+  <section class="panel" id="panel1">
+    <h2 class="section-title">Ticket-First 개발 워크플로우</h2>
+    <p class="section-sub">모든 코드 변경은 티켓 발행 → done 전환까지 연속 실행. <span style="color:var(--red)">빨강 칩</span> = PreToolUse Hook 강제 차단 지점.</p>
+
+    <div class="flow">
+      <div class="node">
+        <div class="head"><span class="num">1</span><span class="title">epic_id 확인</span></div>
+        <div class="desc"><code>get_project_status</code>로 에픽 목록 조회. epic_id <b style="color:var(--red)">null 절대 금지</b>.</div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node">
+        <div class="head"><span class="num">2</span><span class="title">티켓 발행</span></div>
+        <div class="desc"><code>create_task(epic_id="...", title="...")</code> — 티켓 없이 코드 변경 불가.</div>
+        <div class="meta"><span class="chip hook">🛡 epic-id-guard.sh</span></div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node">
+        <div class="head"><span class="num">3</span><span class="title">Discovery Q&amp;A</span></div>
+        <div class="desc">7개 카테고리 문답(목표·사용자·범위·제약·우선순위·리스크·검증) → 방향 확정.</div>
+        <div class="meta">
+          <span class="chip out">📄 docs/00-discovery/</span>
+          <span class="chip opt">✨ superpowers:brainstorming</span>
+        </div>
+        <div class="branch"><b>선택적 리서치 (3→4 사이):</b> <code>research_with_gemini</code> → <code>docs/06-research/</code> (라이브러리 비교·보안·디버깅 시)</div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node">
+        <div class="head"><span class="num">4</span><span class="title">플랜 작성</span></div>
+        <div class="desc">기능 명세(F-001, P0/P1/P2) + 구현 로드맵. MD 기본 / HTML 선택.</div>
+        <div class="meta">
+          <span class="chip out">📄 docs/01-plan/</span>
+          <span class="chip hook">🛡 discovery-guard.sh</span>
+        </div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node">
+        <div class="head"><span class="num">5</span><span class="title">플랜 리뷰</span></div>
+        <div class="desc"><code>critic</code> 독립 리뷰 + 메인 오케스트레이터 자체 검토 → <b>즉시 6단계 진행</b> (사용자 승인 게이트 아님).</div>
+        <div class="meta"><span class="chip out">📄 docs/02-review/</span></div>
+        <div class="branch"><b>Fast-track 분기:</b> 1중 분류 단순 변경은 3~5단계 생략 → 마커 생성 후 바로 구현</div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node">
+        <div class="head"><span class="num">6</span><span class="title">팀 에이전트 병렬 위임</span></div>
+        <div class="desc">파일 소유권 파티셔닝. <code>executor</code> / <code>designer</code> 복잡도별 라우팅(haiku·sonnet·opus).</div>
+        <div class="meta">
+          <span class="chip hook">🛡 plan-review-guard.sh</span>
+          <span class="chip opt">✨ subagent-driven-development</span>
+        </div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node">
+        <div class="head"><span class="num">7</span><span class="title">빌드/테스트 → 코드 리뷰</span></div>
+        <div class="desc"><code>smart_workflow(submit_test)</code> → <code>approve_review</code>. <b style="color:var(--amber)">Iron Law</b>: 실제 실행 증거 없이 완료 주장 금지.</div>
+        <div class="meta">
+          <span class="chip out">📄 docs/03-code-review/</span>
+          <span class="chip hook">🛡 codex-review-guard.sh</span>
+          <span class="chip gate">1중 / 2중 / 3중 검증</span>
+        </div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node">
+        <div class="head"><span class="num">8</span><span class="title">PR 생성</span></div>
+        <div class="desc"><code>/ship</code> — 테스트 + 리뷰 + VERSION 범프 + CHANGELOG + push + PR. <b>done 전환 이후에만</b>.</div>
+        <div class="meta"><span class="chip opt">🚀 gstack</span></div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node">
+        <div class="head"><span class="num">9</span><span class="title">머지 / 배포</span></div>
+        <div class="desc"><code>/land-and-deploy</code> — PR 머지 + CI 대기 + Render 배포 + 헬스 체크.</div>
+        <div class="meta"><span class="chip out">🌐 ai-pm-system.onrender.com</span></div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="node">
+        <div class="head"><span class="num">10</span><span class="title">배포 후 모니터링</span></div>
+        <div class="desc"><code>/canary</code> — 콘솔 에러 + 성능 회귀 + 스크린샷 베이스라인 비교. 이상 시 롤백 시그널.</div>
+        <div class="meta"><span class="chip out">📄 docs/05-deploy/</span></div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><span class="dot" style="background:var(--red)"></span> Hook 강제 차단</span>
+      <span><span class="dot" style="background:var(--green)"></span> 산출물</span>
+      <span><span class="dot" style="background:var(--purple)"></span> 분기 / Superpowers</span>
+      <span><span class="dot" style="background:var(--amber)"></span> 검증 게이트</span>
+    </div>
+  </section>
+
+  <!-- ============ PANEL 2: ARCHITECTURE ============ -->
+  <section class="panel" id="panel2">
+    <h2 class="section-title">시스템 아키텍처</h2>
+    <p class="section-sub">MCP 서버 + Express API + React Web UI 모노레포. 위에서 아래로 데이터 흐름.</p>
+
+    <div class="flow">
+      <div class="layer">
+        <div class="layer-name">Client Layer · 클라이언트</div>
+        <div class="boxes">
+          <div class="box"><div class="b-title acc">Claude Code (MCP Client)</div><div class="b-sub">stdio 연결 · <code>.mcp.json</code></div></div>
+          <div class="box"><div class="b-title pnk">Web UI (브라우저)</div><div class="b-sub">React 19 · Vite 6 · Tailwind v4</div></div>
+        </div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="layer">
+        <div class="layer-name">Entry Layer · 진입점 (@ai-pm/mcp-server)</div>
+        <div class="boxes">
+          <div class="box"><div class="b-title acc">MCP Server</div><div class="b-sub"><code>index.ts</code> · @modelcontextprotocol/sdk · 도구 등록</div></div>
+          <div class="box"><div class="b-title pur">Express API Server</div><div class="b-sub"><code>api-server.ts</code> · REST · <code>middleware/auth.ts</code></div></div>
+        </div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="layer">
+        <div class="layer-name">Service Layer · 비즈니스 로직 (src/services)</div>
+        <div class="boxes">
+          <div class="box"><div class="b-title grn">Core</div><div class="b-sub">project · task · workflow · test-service</div></div>
+          <div class="box"><div class="b-title grn">Intelligence</div><div class="b-sub">analysis · priority-recommendation · auto-assignment · workload</div></div>
+          <div class="box"><div class="b-title grn">Support</div><div class="b-sub">context · search · template · automation · time-tracking · export · notification</div></div>
+          <div class="box"><div class="b-title grn">Integration</div><div class="b-sub">github · research · <code>_security-base.ts</code></div></div>
+        </div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="layer">
+        <div class="layer-name">Data Layer · 데이터</div>
+        <div class="boxes">
+          <div class="box"><div class="b-title amb">PostgreSQL (Neon)</div><div class="b-sub"><code>pg</code> · <code>db/connection.ts</code> · <code>db/migrate.ts</code></div></div>
+        </div>
+      </div>
+      <div class="arrow"></div>
+
+      <div class="layer">
+        <div class="layer-name">External Services · 외부 연동</div>
+        <div class="boxes">
+          <div class="box"><div class="b-title pur">GitHub</div><div class="b-sub"><code>octokit</code> · 이슈·PR 연동</div></div>
+          <div class="box"><div class="b-title pur">Gemini API</div><div class="b-sub"><code>@google/genai</code> · research_with_gemini</div></div>
+          <div class="box"><div class="b-title pnk">Render (Docker)</div><div class="b-sub">healthCheck <code>/api/projects</code> · STATIC_PATH 정적 서빙</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="layer" style="margin-top:18px; border-style:dashed;">
+      <div class="layer-name">Web UI 컴포넌트 (@ai-pm/web-ui)</div>
+      <div class="boxes">
+        <div class="box"><div class="b-title pnk">Pages</div><div class="b-sub">Dashboard · ProjectDetail · TaskDetail</div></div>
+        <div class="box"><div class="b-title pnk">Components</div><div class="b-sub">KanbanBoard · TaskCard · TaskModal · SearchBar</div></div>
+        <div class="box"><div class="b-title pnk">API Client</div><div class="b-sub"><code>api.ts</code> → Express API Server</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PANEL 3: STATE MACHINE ============ -->
+  <section class="panel" id="panel3">
+    <h2 class="section-title">smart_workflow 상태 머신</h2>
+    <p class="section-sub"><code>workflow-service.ts</code> 기반 태스크 상태 전이. 대괄호 = 액션, 색상 원 = 상태.</p>
+
+    <div class="sm">
+      <div class="state start">backlog / todo</div>
+      <div class="transition"><span class="lbl">start_work</span><div class="line"></div></div>
+      <div class="state work">in_progress</div>
+      <div class="transition"><span class="lbl">submit_test</span><div class="line"></div></div>
+      <div class="state test">testing</div>
+      <div class="transition"><span class="lbl">테스트 전체 통과 (자동)</span><div class="line"></div></div>
+      <div class="state rev">review</div>
+      <div class="transition"><span class="lbl">approve_review · notes 20자+</span><div class="line"></div></div>
+      <div class="state done">done ✓</div>
+
+      <div class="backtrack">
+        ↺ <b>백트랙:</b> <code>review</code> → <code>request_changes</code> → <code>in_progress</code> &nbsp;|&nbsp;
+        <code>testing</code> 실패 시 <code>testing</code> 유지 → <code>complete_fix</code> → 재 <code>testing</code>
+      </div>
+
+      <div class="sm-note">
+        <b>가드 규칙</b> · <code>update_task_status</code>로 testing→review, review→done <b>직접 전환 금지</b>(서버 차단).
+        <code>submit_test</code>는 build 출력 10자+ 필수, <code>approve_review</code>는 리뷰 notes 20자+ 필수.
+        self-approval(작성자 본인 승인) 금지.
+      </div>
+      <div class="sm-note" style="border-left-color:var(--green);">
+        <b>자동 전이</b> · <code>submit_test</code> 호출 시 in_progress → testing 자동 전환 후, 테스트 전체 통과하면 testing → review로 <b>자동 진행</b>(bypassGuard). 사용자 개입 불필요.
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><span class="dot" style="background:var(--muted)"></span> 시작</span>
+      <span><span class="dot" style="background:var(--accent)"></span> 작업중</span>
+      <span><span class="dot" style="background:var(--amber)"></span> 테스트</span>
+      <span><span class="dot" style="background:var(--purple)"></span> 리뷰</span>
+      <span><span class="dot" style="background:var(--green)"></span> 완료</span>
+    </div>
+  </section>
+</main>
+
+<footer>
+  생성: 2026-06-15 · 출처 <code>CLAUDE.md</code> · <code>.claude/rules/</code> · <code>packages/mcp-server/src/services/workflow-service.ts</code><br>
+  AI PM System · APS · <code>3bc28444-2e96-4587-be23-4c48e220aa66</code>
+</footer>
+</body>
+</html>
