@@ -5,6 +5,7 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 .env
+.env.bak*
 .env.test
 .env.test.local
 *.log
