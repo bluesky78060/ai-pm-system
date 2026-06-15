@@ -36,6 +36,7 @@
 | 표준 템플릿 (MCP 도구·외부 API·서비스) | `.claude/templates/` |
 | Fast-track 정책 (1중 분류 단순 변경) | `.claude/rules/fast-track.md` |
 | 연속 실행 원칙 (silent-stop 금지, 중단 시 보고 의무) | `.claude/rules/continuous-execution.md` |
+| OMC 신규 스킬 통합 (wiki/ultragoal/autoresearch · 중복 회피) | `.claude/rules/omc-skills-integration.md` |
 
 ## 핵심 강제 규칙 (요약)
 
