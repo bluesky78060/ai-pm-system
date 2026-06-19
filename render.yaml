@@ -18,3 +18,5 @@ services:
           property: connectionString
       - key: STATIC_PATH
         value: /app/packages/web-ui/dist
+      - key: STRICT_SUBMIT_TEST_PROJECTS
+        value: APS
