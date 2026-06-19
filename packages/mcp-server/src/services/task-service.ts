@@ -1,8 +1,8 @@
-import { TaskRepository } from '../db/repositories/task-repo.js';
-import { EpicRepository } from '../db/repositories/epic-repo.js';
 import { ActivityRepository } from '../db/repositories/activity-repo.js';
-import { UUID_REGEX } from '../utils/code-gen.js';
+import { EpicRepository } from '../db/repositories/epic-repo.js';
+import { TaskRepository } from '../db/repositories/task-repo.js';
 import type { Task, TaskStatus } from '../types/index.js';
+import { UUID_REGEX } from '../utils/code-gen.js';
 import { notificationService } from './notification-service.js';
 import { TimeTrackingService } from './time-tracking-service.js';
 
@@ -12,370 +12,411 @@ const activityRepo = new ActivityRepository();
 const timeTrackingService = new TimeTrackingService();
 
 async function resolveTask(idOrCode: string): Promise<Task> {
-  let task: Task | undefined;
-  if (UUID_REGEX.test(idOrCode)) {
-    task = await taskRepo.findById(idOrCode);
-  } else {
-    task = await taskRepo.findByTicketCode(idOrCode);
-  }
-  if (!task) { console.error(`[TaskService] Task not found: ${idOrCode}`); throw new Error('태스크를 찾을 수 없습니다'); }
-  return task;
+	let task: Task | undefined;
+	if (UUID_REGEX.test(idOrCode)) {
+		task = await taskRepo.findById(idOrCode);
+	} else {
+		task = await taskRepo.findByTicketCode(idOrCode);
+	}
+	if (!task) {
+		console.error(`[TaskService] Task not found: ${idOrCode}`);
+		throw new Error('태스크를 찾을 수 없습니다');
+	}
+	return task;
 }
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
-  todo: ['in_progress', 'blocked'],
-  in_progress: ['testing', 'blocked', 'todo'],
-  testing: ['fixing', 'review', 'blocked'],
-  fixing: ['testing', 'blocked'],
-  review: ['done', 'in_progress'],
-  done: ['in_progress'],
-  blocked: ['todo', 'in_progress'],
+	todo: ['in_progress', 'blocked'],
+	in_progress: ['testing', 'blocked', 'todo'],
+	testing: ['fixing', 'review', 'blocked'],
+	fixing: ['testing', 'blocked'],
+	review: ['done', 'in_progress'],
+	done: ['in_progress'],
+	blocked: ['todo', 'in_progress'],
 };
 
 export class TaskService {
-  async getById(idOrCode: string): Promise<Task | undefined> {
-    if (UUID_REGEX.test(idOrCode)) return taskRepo.findById(idOrCode);
-    return taskRepo.findByTicketCode(idOrCode);
-  }
+	async getById(idOrCode: string): Promise<Task | undefined> {
+		if (UUID_REGEX.test(idOrCode)) return taskRepo.findById(idOrCode);
+		return taskRepo.findByTicketCode(idOrCode);
+	}
 
-  async getAll(filters?: { epic_id?: string; status?: string; assignee?: string; project_id?: string }): Promise<Task[]> {
-    return taskRepo.findAll(filters);
-  }
+	async getAll(filters?: {
+		epic_id?: string;
+		status?: string;
+		assignee?: string;
+		project_id?: string;
+	}): Promise<Task[]> {
+		return taskRepo.findAll(filters);
+	}
 
-  async getSubtasks(parentId: string): Promise<Task[]> {
-    return taskRepo.findByParent(parentId);
-  }
+	async getSubtasks(parentId: string): Promise<Task[]> {
+		return taskRepo.findByParent(parentId);
+	}
 
-  async create(data: {
-    title: string;
-    epic_id?: string;
-    parent_id?: string;
-    project_id?: string;
-    description?: string;
-    priority?: number;
-    assignee?: string;
-    created_by?: 'ai' | 'human';
-    estimated_hrs?: number;
-  }): Promise<{ task: Task; message: string }> {
-    // project_id가 있고 epic_id가 없으면 기본 에픽에 자동 연결
-    if (data.project_id && !data.epic_id) {
-      const epics = await epicRepo.findByProject(data.project_id);
-      let defaultEpic = epics.find(e => e.title === 'General');
-      if (!defaultEpic) {
-        defaultEpic = await epicRepo.create({
-          project_id: data.project_id,
-          title: 'General',
-          description: '기본 에픽 (project_id로 생성된 태스크 자동 연결)',
-          priority: 5,
-        });
-      }
-      data.epic_id = defaultEpic.id;
-    }
-    const { project_id: _pid, ...createData } = data;
-    const task = await taskRepo.create(createData);
+	async create(data: {
+		title: string;
+		epic_id?: string;
+		parent_id?: string;
+		project_id?: string;
+		description?: string;
+		priority?: number;
+		assignee?: string;
+		created_by?: 'ai' | 'human';
+		estimated_hrs?: number;
+	}): Promise<{ task: Task; message: string }> {
+		// project_id가 있고 epic_id가 없으면 기본 에픽에 자동 연결
+		if (data.project_id && !data.epic_id) {
+			const epics = await epicRepo.findByProject(data.project_id);
+			let defaultEpic = epics.find((e) => e.title === 'General');
+			if (!defaultEpic) {
+				defaultEpic = await epicRepo.create({
+					project_id: data.project_id,
+					title: 'General',
+					description: '기본 에픽 (project_id로 생성된 태스크 자동 연결)',
+					priority: 5,
+				});
+			}
+			data.epic_id = defaultEpic.id;
+		}
+		const { project_id: _pid, ...createData } = data;
+		const task = await taskRepo.create(createData);
 
-    // 풍부한 생성 로그: 에픽 이름, 우선순위, 설명 포함
-    const epicInfo = task.epic_id ? await epicRepo.findById(task.epic_id) : null;
-    await activityRepo.create({
-      task_id: task.id,
-      actor: data.created_by ?? 'human',
-      action: 'create',
-      payload: {
-        title: task.title,
-        description: task.description || null,
-        ticket_code: task.ticket_code,
-        epic_id: task.epic_id,
-        epic_title: epicInfo?.title || null,
-        priority: task.priority,
-        assignee: task.assignee || null,
-        estimated_hrs: task.estimated_hrs || null,
-        created_by: data.created_by ?? 'human',
-      },
-    });
-    return { task, message: `태스크 '${task.title}' 생성됨` };
-  }
+		// 풍부한 생성 로그: 에픽 이름, 우선순위, 설명 포함
+		const epicInfo = task.epic_id ? await epicRepo.findById(task.epic_id) : null;
+		await activityRepo.create({
+			task_id: task.id,
+			actor: data.created_by ?? 'human',
+			action: 'create',
+			payload: {
+				title: task.title,
+				description: task.description || null,
+				ticket_code: task.ticket_code,
+				epic_id: task.epic_id,
+				epic_title: epicInfo?.title || null,
+				priority: task.priority,
+				assignee: task.assignee || null,
+				estimated_hrs: task.estimated_hrs || null,
+				created_by: data.created_by ?? 'human',
+			},
+		});
+		return { task, message: `태스크 '${task.title}' 생성됨` };
+	}
 
-  async decompose(taskIdOrCode: string, subtasks: { title: string; description?: string; priority?: number; estimated_hrs?: number }[]): Promise<{
-    parentTask: Task;
-    subtasks: Task[];
-    message: string;
-  }> {
-    const parent = await resolveTask(taskIdOrCode);
-    const taskId = parent.id;
+	async decompose(
+		taskIdOrCode: string,
+		subtasks: { title: string; description?: string; priority?: number; estimated_hrs?: number }[],
+	): Promise<{
+		parentTask: Task;
+		subtasks: Task[];
+		message: string;
+	}> {
+		const parent = await resolveTask(taskIdOrCode);
+		const taskId = parent.id;
 
-    const created: Task[] = [];
-    for (const sub of subtasks) {
-      const task = await taskRepo.create({
-        title: sub.title,
-        description: sub.description,
-        priority: sub.priority,
-        estimated_hrs: sub.estimated_hrs,
-        parent_id: taskId,
-        epic_id: parent.epic_id ?? undefined,
-        created_by: 'ai',
-      });
-      created.push(task);
-    }
+		const created: Task[] = [];
+		for (const sub of subtasks) {
+			const task = await taskRepo.create({
+				title: sub.title,
+				description: sub.description,
+				priority: sub.priority,
+				estimated_hrs: sub.estimated_hrs,
+				parent_id: taskId,
+				epic_id: parent.epic_id ?? undefined,
+				created_by: 'ai',
+			});
+			created.push(task);
+		}
 
-    await activityRepo.create({
-      task_id: taskId,
-      actor: 'ai',
-      action: 'decompose',
-      payload: { subtaskCount: created.length, subtaskIds: created.map((t) => t.id) },
-    });
+		await activityRepo.create({
+			task_id: taskId,
+			actor: 'ai',
+			action: 'decompose',
+			payload: { subtaskCount: created.length, subtaskIds: created.map((t) => t.id) },
+		});
 
-    return {
-      parentTask: parent,
-      subtasks: created,
-      message: `'${parent.title}'을(를) ${created.length}개 서브태스크로 분해함`,
-    };
-  }
+		return {
+			parentTask: parent,
+			subtasks: created,
+			message: `'${parent.title}'을(를) ${created.length}개 서브태스크로 분해함`,
+		};
+	}
 
-  async updateStatus(taskIdOrCode: string, newStatus: string, notes?: string, options?: { bypassGuard?: boolean }): Promise<{ task: Task; previousStatus: string; message: string }> {
-    const task = await resolveTask(taskIdOrCode);
-    const taskId = task.id;
+	async updateStatus(
+		taskIdOrCode: string,
+		newStatus: string,
+		notes?: string,
+		options?: { bypassGuard?: boolean },
+	): Promise<{ task: Task; previousStatus: string; message: string }> {
+		const task = await resolveTask(taskIdOrCode);
+		const taskId = task.id;
 
-    const allowed = VALID_TRANSITIONS[task.status];
-    if (!allowed || !allowed.includes(newStatus)) {
-      throw new Error(`잘못된 상태 전환: ${task.status} → ${newStatus}. 가능한 전환: ${allowed?.join(', ') ?? 'none'}`);
-    }
+		const allowed = VALID_TRANSITIONS[task.status];
+		if (!allowed || !allowed.includes(newStatus)) {
+			throw new Error(
+				`잘못된 상태 전환: ${task.status} → ${newStatus}. 가능한 전환: ${allowed?.join(', ') ?? 'none'}`,
+			);
+		}
 
-    // smart_workflow를 통한 호출은 가드 우회 (실제 검증이 포함되어 있으므로)
-    const bypass = options?.bypassGuard === true;
+		// smart_workflow를 통한 호출은 가드 우회 (실제 검증이 포함되어 있으므로)
+		const bypass = options?.bypassGuard === true;
 
-    if (!bypass) {
-      // 워크플로우 전용 전환: testing→review, review→done은 직접 호출 금지
-      const WORKFLOW_ONLY: Record<string, string[]> = {
-        testing: ['review'],
-        review: ['done'],
-      };
-      const isWorkflowOnly = WORKFLOW_ONLY[task.status]?.includes(newStatus);
-      if (isWorkflowOnly) {
-        throw new Error(
-          `${task.status} → ${newStatus} 전환은 smart_workflow를 통해서만 가능합니다. ` +
-          `testing→review: submit_test(빌드/테스트 결과 제출), review→done: approve_review(코드 리뷰 결과 제출)를 사용하세요.`
-        );
-      }
-    }
+		if (!bypass) {
+			// 워크플로우 전용 전환: testing→review, review→done은 직접 호출 금지
+			const WORKFLOW_ONLY: Record<string, string[]> = {
+				testing: ['review'],
+				review: ['done'],
+			};
+			const isWorkflowOnly = WORKFLOW_ONLY[task.status]?.includes(newStatus);
+			if (isWorkflowOnly) {
+				throw new Error(
+					`${task.status} → ${newStatus} 전환은 smart_workflow를 통해서만 가능합니다. testing→review: submit_test(빌드/테스트 결과 제출), review→done: approve_review(코드 리뷰 결과 제출)를 사용하세요.`,
+				);
+			}
+		}
 
-    const previousStatus = task.status;
+		const previousStatus = task.status;
 
-    // Time tracking integration
-    // Stop tracking when leaving in_progress, testing, fixing, review, or blocked
-    if (['in_progress', 'testing', 'fixing', 'review', 'blocked'].includes(previousStatus)) {
-      await timeTrackingService.stopTracking(taskId);
-    }
+		// Time tracking integration
+		// Stop tracking when leaving in_progress, testing, fixing, review, or blocked
+		if (['in_progress', 'testing', 'fixing', 'review', 'blocked'].includes(previousStatus)) {
+			await timeTrackingService.stopTracking(taskId);
+		}
 
-    // Start tracking when entering in_progress, testing, fixing, review, or blocked
-    if (['in_progress', 'testing', 'fixing', 'review', 'blocked'].includes(newStatus)) {
-      await timeTrackingService.startTracking(taskId, newStatus, notes);
-    }
+		// Start tracking when entering in_progress, testing, fixing, review, or blocked
+		if (['in_progress', 'testing', 'fixing', 'review', 'blocked'].includes(newStatus)) {
+			await timeTrackingService.startTracking(taskId, newStatus, notes);
+		}
 
-    const updated = await taskRepo.updateStatus(taskId, newStatus, notes);
+		const updated = await taskRepo.updateStatus(taskId, newStatus, notes);
 
-    // 소요 시간 계산
-    const allActivities = await activityRepo.findByTask(taskId, 100);
-    const lastTime = allActivities.length > 0 ? new Date(allActivities[0].created_at) : new Date(task.created_at);
-    const durationSeconds = Math.floor((Date.now() - lastTime.getTime()) / 1000);
-    const createdTime = new Date(task.created_at);
-    const totalSeconds = Math.floor((Date.now() - createdTime.getTime()) / 1000);
+		// 소요 시간 계산
+		const allActivities = await activityRepo.findByTask(taskId, 100);
+		const lastTime =
+			allActivities.length > 0 ? new Date(allActivities[0].created_at) : new Date(task.created_at);
+		const durationSeconds = Math.floor((Date.now() - lastTime.getTime()) / 1000);
+		const createdTime = new Date(task.created_at);
+		const totalSeconds = Math.floor((Date.now() - createdTime.getTime()) / 1000);
 
-    // 상태 전환별 추가 컨텍스트 수집
-    const extra: Record<string, unknown> = {};
+		// 상태 전환별 추가 컨텍스트 수집
+		const extra: Record<string, unknown> = {};
 
-    if (newStatus === 'in_progress') {
-      // 서브태스크 정보
-      const subtasks = await taskRepo.findByParent(taskId);
-      const deps = await taskRepo.getDependencies(taskId);
-      if (subtasks.length > 0) {
-        extra.subtask_count = subtasks.length;
-        extra.subtask_done = subtasks.filter(s => s.status === 'done').length;
-      }
-      if (deps.length > 0) extra.dependency_count = deps.length;
-    }
+		if (newStatus === 'in_progress') {
+			// 서브태스크 정보
+			const subtasks = await taskRepo.findByParent(taskId);
+			const deps = await taskRepo.getDependencies(taskId);
+			if (subtasks.length > 0) {
+				extra.subtask_count = subtasks.length;
+				extra.subtask_done = subtasks.filter((s) => s.status === 'done').length;
+			}
+			if (deps.length > 0) extra.dependency_count = deps.length;
+		}
 
-    if (newStatus === 'done') {
-      // 에픽 진행률
-      if (task.epic_id) {
-        const epicTasks = await taskRepo.findByEpic(task.epic_id);
-        const epicTotal = epicTasks.length;
-        const epicDone = epicTasks.filter(t => t.status === 'done').length + 1; // +1 for current task
-        extra.epic_progress = { total: epicTotal, completed: Math.min(epicDone, epicTotal), rate: epicTotal > 0 ? Math.round((Math.min(epicDone, epicTotal) / epicTotal) * 100) : 0 };
-      }
-      extra.total_duration_seconds = totalSeconds;
-      // 이 태스크의 전체 상태 변경 히스토리
-      const statusChanges = allActivities.filter(a => a.action === 'status_change').reverse();
-      extra.status_history = statusChanges.map(a => {
-        const p = (typeof a.payload === 'object' && a.payload !== null) ? a.payload as Record<string, unknown> : {};
-        return { from: p.from, to: p.to, at: a.created_at };
-      });
-    }
+		if (newStatus === 'done') {
+			// 에픽 진행률
+			if (task.epic_id) {
+				const epicTasks = await taskRepo.findByEpic(task.epic_id);
+				const epicTotal = epicTasks.length;
+				const epicDone = epicTasks.filter((t) => t.status === 'done').length + 1; // +1 for current task
+				extra.epic_progress = {
+					total: epicTotal,
+					completed: Math.min(epicDone, epicTotal),
+					rate: epicTotal > 0 ? Math.round((Math.min(epicDone, epicTotal) / epicTotal) * 100) : 0,
+				};
+			}
+			extra.total_duration_seconds = totalSeconds;
+			// 이 태스크의 전체 상태 변경 히스토리
+			const statusChanges = allActivities.filter((a) => a.action === 'status_change').reverse();
+			extra.status_history = statusChanges.map((a) => {
+				const p =
+					typeof a.payload === 'object' && a.payload !== null
+						? (a.payload as Record<string, unknown>)
+						: {};
+				return { from: p.from, to: p.to, at: a.created_at };
+			});
+		}
 
-    if (newStatus === 'testing' || newStatus === 'review') {
-      // 이전 테스트/수정 시도 횟수
-      const testRuns = allActivities.filter(a => a.action === 'test_run' || a.action === 'workflow_test');
-      const fixAttempts = allActivities.filter(a => {
-        if (a.action !== 'status_change') return false;
-        const p = (typeof a.payload === 'object' && a.payload !== null) ? a.payload : {};
-        return (p as Record<string, unknown>).to === 'fixing';
-      });
-      if (testRuns.length > 0) extra.test_run_count = testRuns.length;
-      if (fixAttempts.length > 0) extra.fix_attempt_count = fixAttempts.length;
-    }
+		if (newStatus === 'testing' || newStatus === 'review') {
+			// 이전 테스트/수정 시도 횟수
+			const testRuns = allActivities.filter(
+				(a) => a.action === 'test_run' || a.action === 'workflow_test',
+			);
+			const fixAttempts = allActivities.filter((a) => {
+				if (a.action !== 'status_change') return false;
+				const p = typeof a.payload === 'object' && a.payload !== null ? a.payload : {};
+				return (p as Record<string, unknown>).to === 'fixing';
+			});
+			if (testRuns.length > 0) extra.test_run_count = testRuns.length;
+			if (fixAttempts.length > 0) extra.fix_attempt_count = fixAttempts.length;
+		}
 
-    if (newStatus === 'blocked') {
-      extra.blocked_from = previousStatus;
-    }
+		if (newStatus === 'blocked') {
+			extra.blocked_from = previousStatus;
+		}
 
-    await activityRepo.create({
-      task_id: taskId,
-      actor: 'ai',
-      action: 'status_change',
-      payload: {
-        from: previousStatus,
-        to: newStatus,
-        notes,
-        duration_seconds: durationSeconds,
-        ticket_code: task.ticket_code,
-        ...extra,
-      },
-    });
+		await activityRepo.create({
+			task_id: taskId,
+			actor: 'ai',
+			action: 'status_change',
+			payload: {
+				from: previousStatus,
+				to: newStatus,
+				notes,
+				duration_seconds: durationSeconds,
+				ticket_code: task.ticket_code,
+				...extra,
+			},
+		});
 
-    // Slack 알림 전송 (비동기, 에러 무시)
-    notificationService.notifyStatusChange({
-      task: updated,
-      previousStatus,
-      newStatus,
-      notes,
-      extra,
-    }).catch(err => {
-      console.error('[TaskService] Notification failed:', err);
-    });
+		// Slack 알림 전송 (비동기, 에러 무시)
+		notificationService
+			.notifyStatusChange({
+				task: updated,
+				previousStatus,
+				newStatus,
+				notes,
+				extra,
+			})
+			.catch((err) => {
+				console.error('[TaskService] Notification failed:', err);
+			});
 
-    return {
-      task: updated,
-      previousStatus,
-      message: `'${task.title}' 상태 변경: ${previousStatus} → ${newStatus}`,
-    };
-  }
+		return {
+			task: updated,
+			previousStatus,
+			message: `'${task.title}' 상태 변경: ${previousStatus} → ${newStatus}`,
+		};
+	}
 
-  async setPriority(taskIdOrCode: string, priority: number, reason: string): Promise<{ task: Task; previousPriority: number; message: string }> {
-    if (priority < 1 || priority > 5) throw new Error('우선순위는 1~5 사이여야 합니다');
+	async setPriority(
+		taskIdOrCode: string,
+		priority: number,
+		reason: string,
+	): Promise<{ task: Task; previousPriority: number; message: string }> {
+		if (priority < 1 || priority > 5) throw new Error('우선순위는 1~5 사이여야 합니다');
 
-    const task = await resolveTask(taskIdOrCode);
-    const taskId = task.id;
+		const task = await resolveTask(taskIdOrCode);
+		const taskId = task.id;
 
-    const previousPriority = task.priority;
-    const updated = await taskRepo.updatePriority(taskId, priority);
+		const previousPriority = task.priority;
+		const updated = await taskRepo.updatePriority(taskId, priority);
 
-    await activityRepo.create({
-      task_id: taskId,
-      actor: 'ai',
-      action: 'update',
-      payload: { field: 'priority', from: previousPriority, to: priority, reason },
-    });
+		await activityRepo.create({
+			task_id: taskId,
+			actor: 'ai',
+			action: 'update',
+			payload: { field: 'priority', from: previousPriority, to: priority, reason },
+		});
 
-    return {
-      task: updated,
-      previousPriority,
-      message: `'${task.title}' 우선순위: ${previousPriority} → ${priority} (${reason})`,
-    };
-  }
+		return {
+			task: updated,
+			previousPriority,
+			message: `'${task.title}' 우선순위: ${previousPriority} → ${priority} (${reason})`,
+		};
+	}
 
-  async addDependency(taskIdOrCode: string, dependsOnIdOrCode: string): Promise<{ message: string }> {
-    const task = await resolveTask(taskIdOrCode);
-    const taskId = task.id;
-    const dep = await resolveTask(dependsOnIdOrCode);
-    const dependsOnId = dep.id;
+	async addDependency(
+		taskIdOrCode: string,
+		dependsOnIdOrCode: string,
+	): Promise<{ message: string }> {
+		const task = await resolveTask(taskIdOrCode);
+		const taskId = task.id;
+		const dep = await resolveTask(dependsOnIdOrCode);
+		const dependsOnId = dep.id;
 
-    if (await taskRepo.hasCircularDependency(taskId, dependsOnId)) {
-      throw new Error(`순환 의존성이 감지되었습니다: ${taskId} → ${dependsOnId}`);
-    }
+		if (await taskRepo.hasCircularDependency(taskId, dependsOnId)) {
+			throw new Error(`순환 의존성이 감지되었습니다: ${taskId} → ${dependsOnId}`);
+		}
 
-    await taskRepo.addDependency(taskId, dependsOnId);
+		await taskRepo.addDependency(taskId, dependsOnId);
 
-    await activityRepo.create({
-      task_id: taskId,
-      actor: 'ai',
-      action: 'update',
-      payload: { field: 'dependency', dependsOn: dependsOnId },
-    });
+		await activityRepo.create({
+			task_id: taskId,
+			actor: 'ai',
+			action: 'update',
+			payload: { field: 'dependency', dependsOn: dependsOnId },
+		});
 
-    return { message: `의존성 추가: '${task.title}' → '${dep.title}'` };
-  }
+		return { message: `의존성 추가: '${task.title}' → '${dep.title}'` };
+	}
 
-  async delete(idOrCode: string): Promise<void> {
-    const task = await resolveTask(idOrCode);
-    await taskRepo.delete(task.id);
-  }
+	async delete(idOrCode: string): Promise<void> {
+		const task = await resolveTask(idOrCode);
+		await taskRepo.delete(task.id);
+	}
 
-  async update(idOrCode: string, data: Partial<Task>): Promise<Task> {
-    const task = await resolveTask(idOrCode);
-    const updated = await taskRepo.update(task.id, data);
+	async update(idOrCode: string, data: Partial<Task>): Promise<Task> {
+		const task = await resolveTask(idOrCode);
+		const updated = await taskRepo.update(task.id, data);
 
-    // Log meaningful field changes
-    const trackedFields = ['title', 'description', 'assignee', 'estimated_hrs', 'epic_id'];
-    const changes: Record<string, { from: unknown; to: unknown }> = {};
-    const taskRecord = task as unknown as Record<string, unknown>;
-    const dataRecord = data as unknown as Record<string, unknown>;
-    for (const field of trackedFields) {
-      if (field in data && dataRecord[field] !== taskRecord[field]) {
-        changes[field] = {
-          from: taskRecord[field],
-          to: dataRecord[field],
-        };
-      }
-    }
+		// Log meaningful field changes
+		const trackedFields = ['title', 'description', 'assignee', 'estimated_hrs', 'epic_id'];
+		const changes: Record<string, { from: unknown; to: unknown }> = {};
+		const taskRecord = task as unknown as Record<string, unknown>;
+		const dataRecord = data as unknown as Record<string, unknown>;
+		for (const field of trackedFields) {
+			if (field in data && dataRecord[field] !== taskRecord[field]) {
+				changes[field] = {
+					from: taskRecord[field],
+					to: dataRecord[field],
+				};
+			}
+		}
 
-    if (Object.keys(changes).length > 0) {
-      await activityRepo.create({
-        task_id: task.id,
-        actor: 'human',
-        action: 'update',
-        payload: { changes },
-      });
-    }
+		if (Object.keys(changes).length > 0) {
+			await activityRepo.create({
+				task_id: task.id,
+				actor: 'human',
+				action: 'update',
+				payload: { changes },
+			});
+		}
 
-    return updated;
-  }
+		return updated;
+	}
 
-  async getStatusCounts(projectId: string): Promise<Record<string, number>> {
-    return taskRepo.countByStatus(projectId);
-  }
+	async getStatusCounts(projectId: string): Promise<Record<string, number>> {
+		return taskRepo.countByStatus(projectId);
+	}
 
-  /**
-   * 지연된 태스크(7일 이상 in_progress)를 찾아 알림을 전송합니다.
-   */
-  async notifyStaleTasks(projectId?: string): Promise<{ notified: number; tasks: Task[] }> {
-    const filters = projectId ? { project_id: projectId, status: 'in_progress' } : { status: 'in_progress' };
-    const inProgressTasks = await taskRepo.findAll(filters);
+	/**
+	 * 지연된 태스크(7일 이상 in_progress)를 찾아 알림을 전송합니다.
+	 */
+	async notifyStaleTasks(projectId?: string): Promise<{ notified: number; tasks: Task[] }> {
+		const filters = projectId
+			? { project_id: projectId, status: 'in_progress' }
+			: { status: 'in_progress' };
+		const inProgressTasks = await taskRepo.findAll(filters);
 
-    const staleTasks: Task[] = [];
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+		const staleTasks: Task[] = [];
+		const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
-    for (const task of inProgressTasks) {
-      // in_progress로 전환된 시점 찾기
-      const activities = await activityRepo.findByTask(task.id, 100);
-      const lastInProgressChange = activities.reverse().find(a => {
-        if (a.action !== 'status_change') return false;
-        const p = (typeof a.payload === 'object' && a.payload !== null) ? a.payload as Record<string, unknown> : {};
-        return p.to === 'in_progress';
-      });
+		for (const task of inProgressTasks) {
+			// in_progress로 전환된 시점 찾기
+			const activities = await activityRepo.findByTask(task.id, 100);
+			const lastInProgressChange = activities.reverse().find((a) => {
+				if (a.action !== 'status_change') return false;
+				const p =
+					typeof a.payload === 'object' && a.payload !== null
+						? (a.payload as Record<string, unknown>)
+						: {};
+				return p.to === 'in_progress';
+			});
 
-      if (lastInProgressChange) {
-        const changeTime = new Date(lastInProgressChange.created_at).getTime();
-        const daysInProgress = Math.floor((Date.now() - changeTime) / (24 * 60 * 60 * 1000));
+			if (lastInProgressChange) {
+				const changeTime = new Date(lastInProgressChange.created_at).getTime();
+				const daysInProgress = Math.floor((Date.now() - changeTime) / (24 * 60 * 60 * 1000));
 
-        if (changeTime < sevenDaysAgo) {
-          staleTasks.push(task);
-          // 알림 전송 (비동기, 에러 무시)
-          notificationService.notifyStaleTask(task, daysInProgress).catch(err => {
-            console.error(`[TaskService] Failed to notify stale task ${task.id}:`, err);
-          });
-        }
-      }
-    }
+				if (changeTime < sevenDaysAgo) {
+					staleTasks.push(task);
+					// 알림 전송 (비동기, 에러 무시)
+					notificationService.notifyStaleTask(task, daysInProgress).catch((err) => {
+						console.error(`[TaskService] Failed to notify stale task ${task.id}:`, err);
+					});
+				}
+			}
+		}
 
-    return { notified: staleTasks.length, tasks: staleTasks };
-  }
+		return { notified: staleTasks.length, tasks: staleTasks };
+	}
 }

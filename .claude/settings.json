@@ -1,19 +1,19 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(npm audit *)",
-      "Bash(npm ls *)",
-      "Bash(git check-ignore *)",
-      "Bash(pnpm audit *)",
-      "mcp__ai-pm__list_tasks",
-      "mcp__ai-pm__get_project_status",
-      "mcp__playwright__browser_take_screenshot",
-      "mcp__playwright__browser_console_messages",
-      "mcp__plugin_oh-my-claudecode_t__lsp_diagnostics",
-      "mcp__plugin_oh-my-claudecode_t__ast_grep_search",
-      "mcp__playwright__browser_snapshot",
-      "mcp__ai-pm__get_task",
-      "mcp__Neon__list_projects"
-    ]
-  }
+	"permissions": {
+		"allow": [
+			"Bash(npm audit *)",
+			"Bash(npm ls *)",
+			"Bash(git check-ignore *)",
+			"Bash(pnpm audit *)",
+			"mcp__ai-pm__list_tasks",
+			"mcp__ai-pm__get_project_status",
+			"mcp__playwright__browser_take_screenshot",
+			"mcp__playwright__browser_console_messages",
+			"mcp__plugin_oh-my-claudecode_t__lsp_diagnostics",
+			"mcp__plugin_oh-my-claudecode_t__ast_grep_search",
+			"mcp__playwright__browser_snapshot",
+			"mcp__ai-pm__get_task",
+			"mcp__Neon__list_projects"
+		]
+	}
 }

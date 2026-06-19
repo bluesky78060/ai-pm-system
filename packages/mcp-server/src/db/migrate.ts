@@ -169,18 +169,20 @@ CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON saved_searches(user_id);
 `;
 
 export async function runMigrations(): Promise<void> {
-  const pool = getPool();
+	const pool = getPool();
 
-  // Execute each statement separately to handle "already exists" gracefully
-  const statements = SCHEMA.split(';').map(s => s.trim()).filter(s => s.length > 0);
-  for (const stmt of statements) {
-    try {
-      await pool.query(stmt);
-    } catch (err: unknown) {
-      const pgErr = err as { code?: string };
-      // 42P07 = relation already exists, 42710 = index already exists
-      if (pgErr.code === '42P07' || pgErr.code === '42710') continue;
-      throw err;
-    }
-  }
+	// Execute each statement separately to handle "already exists" gracefully
+	const statements = SCHEMA.split(';')
+		.map((s) => s.trim())
+		.filter((s) => s.length > 0);
+	for (const stmt of statements) {
+		try {
+			await pool.query(stmt);
+		} catch (err: unknown) {
+			const pgErr = err as { code?: string };
+			// 42P07 = relation already exists, 42710 = index already exists
+			if (pgErr.code === '42P07' || pgErr.code === '42710') continue;
+			throw err;
+		}
+	}
 }

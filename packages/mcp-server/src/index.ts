@@ -2,48 +2,48 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { runMigrations } from './db/migrate.js';
-import { ProjectService } from './services/project-service.js';
-import { TaskService } from './services/task-service.js';
-import { ContextService } from './services/context-service.js';
-import { TestService } from './services/test-service.js';
-import { GitHubService } from './services/github-service.js';
 import { ActivityRepository } from './db/repositories/activity-repo.js';
-import { WorkflowService } from './services/workflow-service.js';
+import { executeRemote, isRemoteMode } from './remote-client.js';
 import { AnalysisService } from './services/analysis-service.js';
-import { AutomationService } from './services/automation-service.js';
-import { TimeTrackingService } from './services/time-tracking-service.js';
-import { PriorityRecommendationService } from './services/priority-recommendation-service.js';
-import { WorkloadService } from './services/workload-service.js';
-import { TemplateService } from './services/template-service.js';
-import { ExportService } from './services/export-service.js';
 import { AutoAssignmentService } from './services/auto-assignment-service.js';
-import { ResearchService, type ResearchInput } from './services/research-service.js';
-import type { AutomationTrigger, AutomationAction } from './types/entities.js';
-import { isRemoteMode, executeRemote } from './remote-client.js';
+import { AutomationService } from './services/automation-service.js';
+import { ContextService } from './services/context-service.js';
+import { ExportService } from './services/export-service.js';
+import { GitHubService } from './services/github-service.js';
+import { PriorityRecommendationService } from './services/priority-recommendation-service.js';
+import { ProjectService } from './services/project-service.js';
+import { type ResearchInput, ResearchService } from './services/research-service.js';
+import { TaskService } from './services/task-service.js';
+import { TemplateService } from './services/template-service.js';
+import { TestService } from './services/test-service.js';
+import { TimeTrackingService } from './services/time-tracking-service.js';
+import { WorkflowService } from './services/workflow-service.js';
+import { WorkloadService } from './services/workload-service.js';
+import type { AutomationAction, AutomationTrigger } from './types/entities.js';
 
 const ErrorCode = {
-  NOT_FOUND: 'NOT_FOUND',
-  INVALID_TRANSITION: 'INVALID_TRANSITION',
-  CIRCULAR_DEPENDENCY: 'CIRCULAR_DEPENDENCY',
-  VALIDATION_ERROR: 'VALIDATION_ERROR',
-  UNKNOWN: 'UNKNOWN',
+	NOT_FOUND: 'NOT_FOUND',
+	INVALID_TRANSITION: 'INVALID_TRANSITION',
+	CIRCULAR_DEPENDENCY: 'CIRCULAR_DEPENDENCY',
+	VALIDATION_ERROR: 'VALIDATION_ERROR',
+	UNKNOWN: 'UNKNOWN',
 } as const;
 
 function classifyError(error: Error): { code: string; message: string } {
-  const msg = error.message;
-  if (msg.includes('찾을 수 없습니다') || msg.includes('not found')) {
-    return { code: ErrorCode.NOT_FOUND, message: msg };
-  }
-  if (msg.includes('전환할 수 없습니다') || msg.includes('transition')) {
-    return { code: ErrorCode.INVALID_TRANSITION, message: msg };
-  }
-  if (msg.includes('순환') || msg.includes('circular')) {
-    return { code: ErrorCode.CIRCULAR_DEPENDENCY, message: msg };
-  }
-  if (msg.includes('필수') || msg.includes('required') || msg.includes('invalid')) {
-    return { code: ErrorCode.VALIDATION_ERROR, message: msg };
-  }
-  return { code: ErrorCode.UNKNOWN, message: msg };
+	const msg = error.message;
+	if (msg.includes('찾을 수 없습니다') || msg.includes('not found')) {
+		return { code: ErrorCode.NOT_FOUND, message: msg };
+	}
+	if (msg.includes('전환할 수 없습니다') || msg.includes('transition')) {
+		return { code: ErrorCode.INVALID_TRANSITION, message: msg };
+	}
+	if (msg.includes('순환') || msg.includes('circular')) {
+		return { code: ErrorCode.CIRCULAR_DEPENDENCY, message: msg };
+	}
+	if (msg.includes('필수') || msg.includes('required') || msg.includes('invalid')) {
+		return { code: ErrorCode.VALIDATION_ERROR, message: msg };
+	}
+	return { code: ErrorCode.UNKNOWN, message: msg };
 }
 
 // Initialize: local mode only (remote mode skips DB)
@@ -68,10 +68,10 @@ const researchService = remote ? null! : new ResearchService();
 
 // Create MCP server
 const server = new Server(
-  { name: 'ai-pm-system', version: '1.0.0' },
-  {
-    capabilities: { tools: {} },
-    instructions: `AI PM System - 워크플로우 규칙
+	{ name: 'ai-pm-system', version: '1.0.0' },
+	{
+		capabilities: { tools: {} },
+		instructions: `AI PM System - 워크플로우 규칙
 
 모든 코드 변경 작업은 반드시 티켓을 발행한 후 진행해야 합니다.
 
@@ -98,1012 +98,1137 @@ const server = new Server(
 - 여러 태스크를 동시에 in_progress 전환 가능
 - 하나의 태스크에 여러 에이전트를 파일별로 분배하여 병렬 투입 가능
 - 파일 충돌 방지: 같은 파일을 여러 에이전트가 동시 수정 금지`,
-  },
+	},
 );
 
 // Register tools list
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    // Project tools
-    {
-      name: 'create_project',
-      description: 'Create a new project',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          name: { type: 'string', description: 'Project name' },
-          description: { type: 'string', description: 'Project description' },
-          github_repo: { type: 'string', description: 'GitHub repo (owner/repo)' },
-        },
-        required: ['name'],
-      },
-    },
-    {
-      name: 'list_projects',
-      description: 'List all projects',
-      inputSchema: { type: 'object' as const, properties: {} },
-    },
-    {
-      name: 'get_project',
-      description: 'Get project details with epics',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID' },
-        },
-        required: ['project_id'],
-      },
-    },
-    {
-      name: 'create_epic',
-      description: 'Create an epic in a project',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID' },
-          title: { type: 'string', description: 'Epic title' },
-          description: { type: 'string', description: 'Epic description' },
-          priority: { type: 'number', description: 'Priority 1-5' },
-        },
-        required: ['project_id', 'title'],
-      },
-    },
-    // Task tools
-    {
-      name: 'create_task',
-      description: 'Create a new task. AI can autonomously create tasks without approval. IMPORTANT: epic_id is REQUIRED - tasks without epic_id will not appear on dashboard.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          title: { type: 'string', description: 'Task title' },
-          epic_id: { type: 'string', description: 'Epic ID (REQUIRED - use get_project_status to find epic_id, look for "General" epic if unsure)' },
-          project_id: { type: 'string', description: 'Project ID (optional - used with epic_id)' },
-          description: { type: 'string', description: 'Task description' },
-          priority: { type: 'number', description: 'Priority 1(high)-5(low), default 3' },
-          assignee: { type: 'string', description: 'ai | human | username' },
-          parent_id: { type: 'string', description: 'Parent task ID for subtasks' },
-        },
-        required: ['title', 'epic_id'],
-      },
-    },
-    {
-      name: 'decompose_task',
-      description: 'Decompose a task into subtasks automatically',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task to decompose' },
-          subtasks: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                title: { type: 'string' },
-                description: { type: 'string' },
-                priority: { type: 'number' },
-                estimated_hrs: { type: 'number' },
-              },
-              required: ['title'],
-            },
-          },
-        },
-        required: ['task_id', 'subtasks'],
-      },
-    },
-    {
-      name: 'update_task_status',
-      description: 'Update task status with validation. Valid: todo→in_progress|blocked, in_progress→testing|blocked|todo, testing→fixing|review|blocked, fixing→testing|blocked, review→done|in_progress, done→in_progress, blocked→todo|in_progress',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string' },
-          status: { type: 'string', enum: ['todo', 'in_progress', 'testing', 'fixing', 'review', 'done', 'blocked'] },
-          notes: { type: 'string' },
-        },
-        required: ['task_id', 'status'],
-      },
-    },
-    {
-      name: 'set_priority',
-      description: 'Set task priority with reason tracking',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string' },
-          priority: { type: 'number', description: '1(highest) to 5(lowest)' },
-          reason: { type: 'string', description: 'Why this priority change' },
-        },
-        required: ['task_id', 'priority', 'reason'],
-      },
-    },
-    {
-      name: 'add_dependency',
-      description: 'Add dependency between tasks. Circular dependencies are detected and rejected.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task that depends on another' },
-          depends_on_id: { type: 'string', description: 'Prerequisite task' },
-        },
-        required: ['task_id', 'depends_on_id'],
-      },
-    },
-    {
-      name: 'get_task',
-      description: 'Get task details with subtasks',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string' },
-        },
-        required: ['task_id'],
-      },
-    },
-    {
-      name: 'list_tasks',
-      description: 'List tasks with filters',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string' },
-          epic_id: { type: 'string' },
-          status: { type: 'string' },
-          assignee: { type: 'string' },
-        },
-      },
-    },
-    // Context tools (Phase 2)
-    {
-      name: 'get_session_context',
-      description: 'Get session context for AI agent. Returns current tasks, progress, blocking analysis, and next recommended task. Call this at the start of each session.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID' },
-        },
-        required: ['project_id'],
-      },
-    },
-    {
-      name: 'get_project_status',
-      description: 'Get full project status dashboard with epic-level progress and completion rates',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID' },
-        },
-        required: ['project_id'],
-      },
-    },
-    {
-      name: 'get_blocking_analysis',
-      description: 'Analyze blocked and delayed tasks. Returns critical path, blocked dependents, and suggested actions.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID' },
-        },
-        required: ['project_id'],
-      },
-    },
-    // Export/Import tools
-    {
-      name: 'export_project',
-      description: 'Export complete project data (project, epics, tasks, dependencies, activities, test runs, fix attempts) in JSON or CSV format',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID or code' },
-          format: { type: 'string', enum: ['json', 'csv'], description: 'Export format (json or csv)' },
-        },
-        required: ['project_id', 'format'],
-      },
-    },
-    {
-      name: 'import_project',
-      description: 'Import project data from exported JSON. Generates new UUIDs and preserves relationships. Use overwrite=true to replace existing project with same code.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          data: { type: 'object', description: 'Export data object from export_project' },
-          overwrite: { type: 'boolean', description: 'Overwrite if project code exists (default: false)' },
-        },
-        required: ['data'],
-      },
-    },
-    // Test & Fix tools (Phase 3)
-    {
-      name: 'run_tests',
-      description: 'Record test execution results for a task. Automatically increments run number.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID' },
-          results: {
-            type: 'array',
-            description: 'Test results array',
-            items: {
-              type: 'object',
-              properties: {
-                test_type: { type: 'string', enum: ['unit', 'type', 'lint', 'integration', 'build'], description: 'Type of test' },
-                status: { type: 'string', enum: ['pass', 'fail', 'skip'], description: 'Test result' },
-                output: { type: 'string', description: 'Test output' },
-                failures: { type: 'string', description: 'JSON failure details' },
-                duration_ms: { type: 'number', description: 'Duration in ms' },
-              },
-              required: ['test_type', 'status'],
-            },
-          },
-        },
-        required: ['task_id', 'results'],
-      },
-    },
-    {
-      name: 'report_test_result',
-      description: 'Report overall test result. Pass → review, Fail → fixing (auto-retry up to 3x) or blocked (escalation).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID' },
-          result: { type: 'string', enum: ['pass', 'fail'], description: 'Overall test result' },
-          failures: {
-            type: 'array',
-            description: 'Failure details',
-            items: {
-              type: 'object',
-              properties: {
-                file: { type: 'string' },
-                line: { type: 'number' },
-                message: { type: 'string' },
-              },
-              required: ['message'],
-            },
-          },
-        },
-        required: ['task_id', 'result'],
-      },
-    },
-    {
-      name: 'create_fix_task',
-      description: 'Create a fix subtask for a failed test. Records fix attempt (max 3).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          parent_task_id: { type: 'string', description: 'Parent task to fix' },
-          issue_description: { type: 'string', description: 'What needs to be fixed' },
-          files_changed: {
-            type: 'array',
-            description: 'Files that were changed',
-            items: {
-              type: 'object',
-              properties: {
-                path: { type: 'string' },
-                diff: { type: 'string' },
-              },
-              required: ['path'],
-            },
-          },
-        },
-        required: ['parent_task_id', 'issue_description'],
-      },
-    },
-    {
-      name: 'get_fix_history',
-      description: 'Get all test runs and fix attempts history for a task',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID' },
-        },
-        required: ['task_id'],
-      },
-    },
-    {
-      name: 'escalate_to_human',
-      description: 'Escalate a task to human intervention. Sets task to blocked with reason.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID' },
-          reason: { type: 'string', description: 'Why escalation is needed' },
-        },
-        required: ['task_id', 'reason'],
-      },
-    },
-    // GitHub tools (Phase 4)
-    {
-      name: 'link_pr_to_task',
-      description: 'Link a GitHub PR URL to a task. Updates task record with PR reference.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID' },
-          pr_url: { type: 'string', description: 'GitHub PR URL' },
-        },
-        required: ['task_id', 'pr_url'],
-      },
-    },
-    {
-      name: 'get_pr_status',
-      description: 'Get live PR status from GitHub API. Returns state, mergeability, review status.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID with linked PR' },
-        },
-        required: ['task_id'],
-      },
-    },
-    {
-      name: 'create_github_issue',
-      description: 'Create a GitHub Issue from a task. Requires GITHUB_TOKEN env and project github_repo setting.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID' },
-          project_id: { type: 'string', description: 'Project ID (for repo info)' },
-          labels: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Issue labels',
-          },
-        },
-        required: ['task_id', 'project_id'],
-      },
-    },
-    {
-      name: 'sync_commit_progress',
-      description: 'Record a commit hash against a task for progress tracking.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID' },
-          commit_hash: { type: 'string', description: 'Git commit hash' },
-          notes: { type: 'string', description: 'Progress notes' },
-          message: { type: 'string', description: 'Commit message' },
-          files_changed: { type: 'number', description: 'Number of files changed in the commit' },
-          additions: { type: 'number', description: 'Number of lines added' },
-          deletions: { type: 'number', description: 'Number of lines deleted' },
-        },
-        required: ['task_id', 'commit_hash'],
-      },
-    },
-    // Activity tools
-    {
-      name: 'get_task_activities',
-      description: 'Get activity log for a specific task. Returns status changes, creation, and other events.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID or ticket code (e.g. APS-1-3)' },
-          limit: { type: 'number', description: 'Max results (default 20)' },
-        },
-        required: ['task_id'],
-      },
-    },
-    {
-      name: 'get_project_activities',
-      description: 'Get recent activity log for all tasks in a project.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID' },
-          limit: { type: 'number', description: 'Max results (default 30)' },
-        },
-        required: ['project_id'],
-      },
-    },
-    {
-      name: 'get_task_time_summary',
-      description: 'Get comprehensive time tracking summary for a task, including total time spent and breakdown by status.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID or ticket code' },
-        },
-        required: ['task_id'],
-      },
-    },
-    // Subagent tools
-    {
-      name: 'smart_workflow',
-      description: 'Execute compound workflow actions. testing→review and review→done transitions are ONLY allowed through this tool.\n\nAgent routing per action:\n- start_work: Parallel OK. After transition, delegate to executor(sonnet)/executor-high(opus)/designer(sonnet) based on complexity.\n- submit_test: Run pnpm -r build FIRST. Use build-fixer(sonnet) if fails. Include REAL output (10+ chars).\n- approve_review: Run code-reviewer(opus) or /code-review skill FIRST. Include REAL review findings (20+ chars).\n- request_changes: Use when code review finds issues. Requires issues description (20+ chars). Backtracks review→in_progress.\n- complete_fix: Use build-fixer or executor to fix, then re-test.\n\nSkills: /autopilot(auto), /ultrawork(parallel), /ecomode(budget), /build-fix(errors), /ultraqa(test-loop), /code-review, /security-review.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID or ticket code' },
-          action: { type: 'string', enum: ['start_work', 'submit_test', 'complete_fix', 'approve_review', 'request_changes'], description: 'start_work: todo→in_progress. submit_test: requires real build/test results with output. complete_fix: fixing→testing. approve_review: requires real code review notes. request_changes: review→in_progress (code review issues found).' },
-          test_results: {
-            type: 'array', description: 'REQUIRED for submit_test. Must include build result with real output (10+ chars). Run pnpm -r build and include the output.',
-            items: {
-              type: 'object',
-              properties: {
-                test_type: { type: 'string', enum: ['unit', 'type', 'lint', 'integration', 'build'], description: 'build is REQUIRED. Others optional.' },
-                status: { type: 'string', enum: ['pass', 'fail', 'skip'] },
-                output: { type: 'string', description: 'REQUIRED: actual command output (10+ chars). Paste real build/test output here.' },
-                failures: { type: 'string' },
-                duration_ms: { type: 'number' },
-              },
-              required: ['test_type', 'status', 'output'],
-            },
-          },
-          notes: { type: 'string', description: 'REQUIRED for approve_review (20+ chars). Include actual code review findings from code-reviewer agent.' },
-          issues: { type: 'string', description: 'REQUIRED for request_changes (20+ chars). Describe code review issues found.' },
-        },
-        required: ['task_id', 'action'],
-      },
-    },
-    {
-      name: 'auto_analyze',
-      description: 'Run automated project analysis: daily report, bottleneck detection, or velocity metrics.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID' },
-          analysis_type: { type: 'string', enum: ['daily_report', 'bottleneck', 'velocity'], description: 'Type of analysis' },
-        },
-        required: ['project_id', 'analysis_type'],
-      },
-    },
-    {
-      name: 'manage_automation',
-      description: 'Manage automation rules for event-driven actions.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          action: { type: 'string', enum: ['list', 'create', 'delete', 'toggle'], description: 'CRUD action' },
-          project_id: { type: 'string', description: 'Project ID (required for list/create)' },
-          rule_id: { type: 'string', description: 'Rule ID (required for delete/toggle)' },
-          name: { type: 'string', description: 'Rule name (for create)' },
-          trigger_event: { type: 'string', enum: ['epic_completed', 'task_stale', 'all_tests_pass', 'status_change'], description: 'Trigger event (for create)' },
-          action_type: { type: 'string', enum: ['notify', 'auto_transition', 'create_task'], description: 'Action type (for create)' },
-          condition: { type: 'string', description: 'JSON condition (for create)' },
-          action_config: { type: 'string', description: 'JSON action config (for create)' },
-        },
-        required: ['action'],
-      },
-    },
-    // Priority recommendation tools
-    {
-      name: 'analyze_task_priority',
-      description: 'Analyze a task and suggest optimal priority based on blocking dependencies, dependent tasks, time tracking, epic completion rate, and current status. Returns score (0-100), suggested priority (1-5), reasons, and confidence level.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID or ticket code (e.g., APS-1-3)' },
-        },
-        required: ['task_id'],
-      },
-    },
-    {
-      name: 'get_priority_suggestions',
-      description: 'Get AI-generated priority adjustment suggestions for all active tasks in a project. Analyzes dependencies, time spent, epic progress, and task status to recommend priority changes.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID' },
-        },
-        required: ['project_id'],
-      },
-    },
-    {
-      name: 'get_workload_analysis',
-      description: 'Analyze workload distribution by assignee. Returns task count in progress, estimated hours, completion rates, and overload alerts.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID' },
-        },
-        required: ['project_id'],
-      },
-    },
-    // Auto-assignment tools
-    {
-      name: 'suggest_assignee',
-      description: 'Suggest the most appropriate agent for a task based on task type, complexity, and keywords. Analyzes task description and recommends agent type (executor, designer, reviewer, etc.) with model tier (haiku/sonnet/opus).',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Task ID or ticket code (e.g., APS-1-3)' },
-        },
-        required: ['task_id'],
-      },
-    },
-    {
-      name: 'get_assignment_recommendations',
-      description: 'Get AI-generated assignee recommendations for all unassigned tasks in a project. Categorizes by agent type and provides confidence scores.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID' },
-        },
-        required: ['project_id'],
-      },
-    },
-    // Template tools
-    {
-      name: 'create_task_template',
-      description: 'Create a reusable task template with optional subtasks. Useful for recurring task patterns.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID' },
-          name: { type: 'string', description: 'Template name' },
-          description: { type: 'string', description: 'Template description' },
-          priority: { type: 'number', description: 'Default priority (1-5)' },
-          estimated_hrs: { type: 'number', description: 'Default estimated hours' },
-          subtasks: {
-            type: 'array',
-            description: 'Subtask templates',
-            items: {
-              type: 'object',
-              properties: {
-                title: { type: 'string' },
-                description: { type: 'string' },
-                priority: { type: 'number' },
-                estimated_hrs: { type: 'number' },
-              },
-              required: ['title'],
-            },
-          },
-        },
-        required: ['project_id', 'name'],
-      },
-    },
-    {
-      name: 'list_task_templates',
-      description: 'List all task templates for a project',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          project_id: { type: 'string', description: 'Project ID' },
-        },
-        required: ['project_id'],
-      },
-    },
-    {
-      name: 'apply_task_template',
-      description: 'Create a task from a template. Template defaults can be overridden.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          template_id: { type: 'string', description: 'Template ID' },
-          title: { type: 'string', description: 'Override task title (uses template name if omitted)' },
-          epic_id: { type: 'string', description: 'Epic to assign task to' },
-          description: { type: 'string', description: 'Override description' },
-          priority: { type: 'number', description: 'Override priority' },
-          estimated_hrs: { type: 'number', description: 'Override estimated hours' },
-          assignee: { type: 'string', description: 'Override assignee' },
-        },
-        required: ['template_id'],
-      },
-    },
-    // Research tools (Gemini)
-    {
-      name: 'research_with_gemini',
-      description: 'Run automated external research via Google Gemini API and save the result as markdown to docs/06-research/. Use this between Discovery and Plan stages to gather library comparisons, security/vulnerability scans, best practices, or debugging context. CALLER RESPONSIBILITY: Get explicit user approval first (cost gate), then call with confirmed=true. Tool is stateless and cannot prompt user.',
-      inputSchema: {
-        type: 'object' as const,
-        properties: {
-          task_id: { type: 'string', description: 'Active ticket code (e.g., APS-1-1). Pattern: ^[A-Z]+(-\\d+)+$' },
-          topic: { type: 'string', description: 'Research topic (1~500 chars)' },
-          purpose: {
-            type: 'string',
-            enum: ['library_compare', 'security_audit', 'best_practice', 'debugging'],
-            description: 'Research purpose (default: best_practice)',
-          },
-          model: { type: 'string', description: 'Gemini model (default: gemini-2.5-flash)' },
-          context: { type: 'string', description: 'Additional context (0~2000 chars, optional)' },
-          confirmed: { type: 'boolean', description: 'REQUIRED: Caller has obtained user approval for this paid API call. Tool rejects if false.' },
-        },
-        required: ['task_id', 'topic', 'confirmed'],
-      },
-    },
-  ],
+	tools: [
+		// Project tools
+		{
+			name: 'create_project',
+			description: 'Create a new project',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					name: { type: 'string', description: 'Project name' },
+					description: { type: 'string', description: 'Project description' },
+					github_repo: { type: 'string', description: 'GitHub repo (owner/repo)' },
+				},
+				required: ['name'],
+			},
+		},
+		{
+			name: 'list_projects',
+			description: 'List all projects',
+			inputSchema: { type: 'object' as const, properties: {} },
+		},
+		{
+			name: 'get_project',
+			description: 'Get project details with epics',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID' },
+				},
+				required: ['project_id'],
+			},
+		},
+		{
+			name: 'create_epic',
+			description: 'Create an epic in a project',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID' },
+					title: { type: 'string', description: 'Epic title' },
+					description: { type: 'string', description: 'Epic description' },
+					priority: { type: 'number', description: 'Priority 1-5' },
+				},
+				required: ['project_id', 'title'],
+			},
+		},
+		// Task tools
+		{
+			name: 'create_task',
+			description:
+				'Create a new task. AI can autonomously create tasks without approval. IMPORTANT: epic_id is REQUIRED - tasks without epic_id will not appear on dashboard.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					title: { type: 'string', description: 'Task title' },
+					epic_id: {
+						type: 'string',
+						description:
+							'Epic ID (REQUIRED - use get_project_status to find epic_id, look for "General" epic if unsure)',
+					},
+					project_id: { type: 'string', description: 'Project ID (optional - used with epic_id)' },
+					description: { type: 'string', description: 'Task description' },
+					priority: { type: 'number', description: 'Priority 1(high)-5(low), default 3' },
+					assignee: { type: 'string', description: 'ai | human | username' },
+					parent_id: { type: 'string', description: 'Parent task ID for subtasks' },
+				},
+				required: ['title', 'epic_id'],
+			},
+		},
+		{
+			name: 'decompose_task',
+			description: 'Decompose a task into subtasks automatically',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task to decompose' },
+					subtasks: {
+						type: 'array',
+						items: {
+							type: 'object',
+							properties: {
+								title: { type: 'string' },
+								description: { type: 'string' },
+								priority: { type: 'number' },
+								estimated_hrs: { type: 'number' },
+							},
+							required: ['title'],
+						},
+					},
+				},
+				required: ['task_id', 'subtasks'],
+			},
+		},
+		{
+			name: 'update_task_status',
+			description:
+				'Update task status with validation. Valid: todo→in_progress|blocked, in_progress→testing|blocked|todo, testing→fixing|review|blocked, fixing→testing|blocked, review→done|in_progress, done→in_progress, blocked→todo|in_progress',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string' },
+					status: {
+						type: 'string',
+						enum: ['todo', 'in_progress', 'testing', 'fixing', 'review', 'done', 'blocked'],
+					},
+					notes: { type: 'string' },
+				},
+				required: ['task_id', 'status'],
+			},
+		},
+		{
+			name: 'set_priority',
+			description: 'Set task priority with reason tracking',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string' },
+					priority: { type: 'number', description: '1(highest) to 5(lowest)' },
+					reason: { type: 'string', description: 'Why this priority change' },
+				},
+				required: ['task_id', 'priority', 'reason'],
+			},
+		},
+		{
+			name: 'add_dependency',
+			description: 'Add dependency between tasks. Circular dependencies are detected and rejected.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task that depends on another' },
+					depends_on_id: { type: 'string', description: 'Prerequisite task' },
+				},
+				required: ['task_id', 'depends_on_id'],
+			},
+		},
+		{
+			name: 'get_task',
+			description: 'Get task details with subtasks',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string' },
+				},
+				required: ['task_id'],
+			},
+		},
+		{
+			name: 'list_tasks',
+			description: 'List tasks with filters',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string' },
+					epic_id: { type: 'string' },
+					status: { type: 'string' },
+					assignee: { type: 'string' },
+				},
+			},
+		},
+		// Context tools (Phase 2)
+		{
+			name: 'get_session_context',
+			description:
+				'Get session context for AI agent. Returns current tasks, progress, blocking analysis, and next recommended task. Call this at the start of each session.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID' },
+				},
+				required: ['project_id'],
+			},
+		},
+		{
+			name: 'get_project_status',
+			description:
+				'Get full project status dashboard with epic-level progress and completion rates',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID' },
+				},
+				required: ['project_id'],
+			},
+		},
+		{
+			name: 'get_blocking_analysis',
+			description:
+				'Analyze blocked and delayed tasks. Returns critical path, blocked dependents, and suggested actions.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID' },
+				},
+				required: ['project_id'],
+			},
+		},
+		// Export/Import tools
+		{
+			name: 'export_project',
+			description:
+				'Export complete project data (project, epics, tasks, dependencies, activities, test runs, fix attempts) in JSON or CSV format',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID or code' },
+					format: {
+						type: 'string',
+						enum: ['json', 'csv'],
+						description: 'Export format (json or csv)',
+					},
+				},
+				required: ['project_id', 'format'],
+			},
+		},
+		{
+			name: 'import_project',
+			description:
+				'Import project data from exported JSON. Generates new UUIDs and preserves relationships. Use overwrite=true to replace existing project with same code.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					data: { type: 'object', description: 'Export data object from export_project' },
+					overwrite: {
+						type: 'boolean',
+						description: 'Overwrite if project code exists (default: false)',
+					},
+				},
+				required: ['data'],
+			},
+		},
+		// Test & Fix tools (Phase 3)
+		{
+			name: 'run_tests',
+			description: 'Record test execution results for a task. Automatically increments run number.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID' },
+					results: {
+						type: 'array',
+						description: 'Test results array',
+						items: {
+							type: 'object',
+							properties: {
+								test_type: {
+									type: 'string',
+									enum: ['unit', 'type', 'lint', 'integration', 'build'],
+									description: 'Type of test',
+								},
+								status: {
+									type: 'string',
+									enum: ['pass', 'fail', 'skip'],
+									description: 'Test result',
+								},
+								output: { type: 'string', description: 'Test output' },
+								failures: { type: 'string', description: 'JSON failure details' },
+								duration_ms: { type: 'number', description: 'Duration in ms' },
+							},
+							required: ['test_type', 'status'],
+						},
+					},
+				},
+				required: ['task_id', 'results'],
+			},
+		},
+		{
+			name: 'report_test_result',
+			description:
+				'Report overall test result. Pass → review, Fail → fixing (auto-retry up to 3x) or blocked (escalation).',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID' },
+					result: { type: 'string', enum: ['pass', 'fail'], description: 'Overall test result' },
+					failures: {
+						type: 'array',
+						description: 'Failure details',
+						items: {
+							type: 'object',
+							properties: {
+								file: { type: 'string' },
+								line: { type: 'number' },
+								message: { type: 'string' },
+							},
+							required: ['message'],
+						},
+					},
+				},
+				required: ['task_id', 'result'],
+			},
+		},
+		{
+			name: 'create_fix_task',
+			description: 'Create a fix subtask for a failed test. Records fix attempt (max 3).',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					parent_task_id: { type: 'string', description: 'Parent task to fix' },
+					issue_description: { type: 'string', description: 'What needs to be fixed' },
+					files_changed: {
+						type: 'array',
+						description: 'Files that were changed',
+						items: {
+							type: 'object',
+							properties: {
+								path: { type: 'string' },
+								diff: { type: 'string' },
+							},
+							required: ['path'],
+						},
+					},
+				},
+				required: ['parent_task_id', 'issue_description'],
+			},
+		},
+		{
+			name: 'get_fix_history',
+			description: 'Get all test runs and fix attempts history for a task',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID' },
+				},
+				required: ['task_id'],
+			},
+		},
+		{
+			name: 'escalate_to_human',
+			description: 'Escalate a task to human intervention. Sets task to blocked with reason.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID' },
+					reason: { type: 'string', description: 'Why escalation is needed' },
+				},
+				required: ['task_id', 'reason'],
+			},
+		},
+		// GitHub tools (Phase 4)
+		{
+			name: 'link_pr_to_task',
+			description: 'Link a GitHub PR URL to a task. Updates task record with PR reference.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID' },
+					pr_url: { type: 'string', description: 'GitHub PR URL' },
+				},
+				required: ['task_id', 'pr_url'],
+			},
+		},
+		{
+			name: 'get_pr_status',
+			description:
+				'Get live PR status from GitHub API. Returns state, mergeability, review status.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID with linked PR' },
+				},
+				required: ['task_id'],
+			},
+		},
+		{
+			name: 'create_github_issue',
+			description:
+				'Create a GitHub Issue from a task. Requires GITHUB_TOKEN env and project github_repo setting.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID' },
+					project_id: { type: 'string', description: 'Project ID (for repo info)' },
+					labels: {
+						type: 'array',
+						items: { type: 'string' },
+						description: 'Issue labels',
+					},
+				},
+				required: ['task_id', 'project_id'],
+			},
+		},
+		{
+			name: 'sync_commit_progress',
+			description: 'Record a commit hash against a task for progress tracking.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID' },
+					commit_hash: { type: 'string', description: 'Git commit hash' },
+					notes: { type: 'string', description: 'Progress notes' },
+					message: { type: 'string', description: 'Commit message' },
+					files_changed: { type: 'number', description: 'Number of files changed in the commit' },
+					additions: { type: 'number', description: 'Number of lines added' },
+					deletions: { type: 'number', description: 'Number of lines deleted' },
+				},
+				required: ['task_id', 'commit_hash'],
+			},
+		},
+		// Activity tools
+		{
+			name: 'get_task_activities',
+			description:
+				'Get activity log for a specific task. Returns status changes, creation, and other events.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID or ticket code (e.g. APS-1-3)' },
+					limit: { type: 'number', description: 'Max results (default 20)' },
+				},
+				required: ['task_id'],
+			},
+		},
+		{
+			name: 'get_project_activities',
+			description: 'Get recent activity log for all tasks in a project.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID' },
+					limit: { type: 'number', description: 'Max results (default 30)' },
+				},
+				required: ['project_id'],
+			},
+		},
+		{
+			name: 'get_task_time_summary',
+			description:
+				'Get comprehensive time tracking summary for a task, including total time spent and breakdown by status.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID or ticket code' },
+				},
+				required: ['task_id'],
+			},
+		},
+		// Subagent tools
+		{
+			name: 'smart_workflow',
+			description:
+				'Execute compound workflow actions. testing→review and review→done transitions are ONLY allowed through this tool.\n\nAgent routing per action:\n- start_work: Parallel OK. After transition, delegate to executor(sonnet)/executor-high(opus)/designer(sonnet) based on complexity.\n- submit_test: Run pnpm -r build FIRST. Use build-fixer(sonnet) if fails. Include REAL output (10+ chars).\n- approve_review: Run code-reviewer(opus) or /code-review skill FIRST. Include REAL review findings (20+ chars).\n- request_changes: Use when code review finds issues. Requires issues description (20+ chars). Backtracks review→in_progress.\n- complete_fix: Use build-fixer or executor to fix, then re-test.\n\nSkills: /autopilot(auto), /ultrawork(parallel), /ecomode(budget), /build-fix(errors), /ultraqa(test-loop), /code-review, /security-review.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID or ticket code' },
+					action: {
+						type: 'string',
+						enum: [
+							'start_work',
+							'submit_test',
+							'complete_fix',
+							'approve_review',
+							'request_changes',
+						],
+						description:
+							'start_work: todo→in_progress. submit_test: requires real build/test results with output. complete_fix: fixing→testing. approve_review: requires real code review notes. request_changes: review→in_progress (code review issues found).',
+					},
+					test_results: {
+						type: 'array',
+						description:
+							'REQUIRED for submit_test. Must include build result with real output (10+ chars). Run pnpm -r build and include the output.',
+						items: {
+							type: 'object',
+							properties: {
+								test_type: {
+									type: 'string',
+									enum: ['unit', 'type', 'lint', 'integration', 'build'],
+									description: 'build is REQUIRED. Others optional.',
+								},
+								status: { type: 'string', enum: ['pass', 'fail', 'skip'] },
+								output: {
+									type: 'string',
+									description:
+										'REQUIRED: actual command output (10+ chars). Paste real build/test output here.',
+								},
+								failures: { type: 'string' },
+								duration_ms: { type: 'number' },
+							},
+							required: ['test_type', 'status', 'output'],
+						},
+					},
+					notes: {
+						type: 'string',
+						description:
+							'REQUIRED for approve_review (20+ chars). Include actual code review findings from code-reviewer agent.',
+					},
+					issues: {
+						type: 'string',
+						description:
+							'REQUIRED for request_changes (20+ chars). Describe code review issues found.',
+					},
+				},
+				required: ['task_id', 'action'],
+			},
+		},
+		{
+			name: 'auto_analyze',
+			description:
+				'Run automated project analysis: daily report, bottleneck detection, or velocity metrics.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID' },
+					analysis_type: {
+						type: 'string',
+						enum: ['daily_report', 'bottleneck', 'velocity'],
+						description: 'Type of analysis',
+					},
+				},
+				required: ['project_id', 'analysis_type'],
+			},
+		},
+		{
+			name: 'manage_automation',
+			description: 'Manage automation rules for event-driven actions.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					action: {
+						type: 'string',
+						enum: ['list', 'create', 'delete', 'toggle'],
+						description: 'CRUD action',
+					},
+					project_id: { type: 'string', description: 'Project ID (required for list/create)' },
+					rule_id: { type: 'string', description: 'Rule ID (required for delete/toggle)' },
+					name: { type: 'string', description: 'Rule name (for create)' },
+					trigger_event: {
+						type: 'string',
+						enum: ['epic_completed', 'task_stale', 'all_tests_pass', 'status_change'],
+						description: 'Trigger event (for create)',
+					},
+					action_type: {
+						type: 'string',
+						enum: ['notify', 'auto_transition', 'create_task'],
+						description: 'Action type (for create)',
+					},
+					condition: { type: 'string', description: 'JSON condition (for create)' },
+					action_config: { type: 'string', description: 'JSON action config (for create)' },
+				},
+				required: ['action'],
+			},
+		},
+		// Priority recommendation tools
+		{
+			name: 'analyze_task_priority',
+			description:
+				'Analyze a task and suggest optimal priority based on blocking dependencies, dependent tasks, time tracking, epic completion rate, and current status. Returns score (0-100), suggested priority (1-5), reasons, and confidence level.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID or ticket code (e.g., APS-1-3)' },
+				},
+				required: ['task_id'],
+			},
+		},
+		{
+			name: 'get_priority_suggestions',
+			description:
+				'Get AI-generated priority adjustment suggestions for all active tasks in a project. Analyzes dependencies, time spent, epic progress, and task status to recommend priority changes.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID' },
+				},
+				required: ['project_id'],
+			},
+		},
+		{
+			name: 'get_workload_analysis',
+			description:
+				'Analyze workload distribution by assignee. Returns task count in progress, estimated hours, completion rates, and overload alerts.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID' },
+				},
+				required: ['project_id'],
+			},
+		},
+		// Auto-assignment tools
+		{
+			name: 'suggest_assignee',
+			description:
+				'Suggest the most appropriate agent for a task based on task type, complexity, and keywords. Analyzes task description and recommends agent type (executor, designer, reviewer, etc.) with model tier (haiku/sonnet/opus).',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: { type: 'string', description: 'Task ID or ticket code (e.g., APS-1-3)' },
+				},
+				required: ['task_id'],
+			},
+		},
+		{
+			name: 'get_assignment_recommendations',
+			description:
+				'Get AI-generated assignee recommendations for all unassigned tasks in a project. Categorizes by agent type and provides confidence scores.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID' },
+				},
+				required: ['project_id'],
+			},
+		},
+		// Template tools
+		{
+			name: 'create_task_template',
+			description:
+				'Create a reusable task template with optional subtasks. Useful for recurring task patterns.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID' },
+					name: { type: 'string', description: 'Template name' },
+					description: { type: 'string', description: 'Template description' },
+					priority: { type: 'number', description: 'Default priority (1-5)' },
+					estimated_hrs: { type: 'number', description: 'Default estimated hours' },
+					subtasks: {
+						type: 'array',
+						description: 'Subtask templates',
+						items: {
+							type: 'object',
+							properties: {
+								title: { type: 'string' },
+								description: { type: 'string' },
+								priority: { type: 'number' },
+								estimated_hrs: { type: 'number' },
+							},
+							required: ['title'],
+						},
+					},
+				},
+				required: ['project_id', 'name'],
+			},
+		},
+		{
+			name: 'list_task_templates',
+			description: 'List all task templates for a project',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					project_id: { type: 'string', description: 'Project ID' },
+				},
+				required: ['project_id'],
+			},
+		},
+		{
+			name: 'apply_task_template',
+			description: 'Create a task from a template. Template defaults can be overridden.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					template_id: { type: 'string', description: 'Template ID' },
+					title: {
+						type: 'string',
+						description: 'Override task title (uses template name if omitted)',
+					},
+					epic_id: { type: 'string', description: 'Epic to assign task to' },
+					description: { type: 'string', description: 'Override description' },
+					priority: { type: 'number', description: 'Override priority' },
+					estimated_hrs: { type: 'number', description: 'Override estimated hours' },
+					assignee: { type: 'string', description: 'Override assignee' },
+				},
+				required: ['template_id'],
+			},
+		},
+		// Research tools (Gemini)
+		{
+			name: 'research_with_gemini',
+			description:
+				'Run automated external research via Google Gemini API and save the result as markdown to docs/06-research/. Use this between Discovery and Plan stages to gather library comparisons, security/vulnerability scans, best practices, or debugging context. CALLER RESPONSIBILITY: Get explicit user approval first (cost gate), then call with confirmed=true. Tool is stateless and cannot prompt user.',
+			inputSchema: {
+				type: 'object' as const,
+				properties: {
+					task_id: {
+						type: 'string',
+						description: 'Active ticket code (e.g., APS-1-1). Pattern: ^[A-Z]+(-\\d+)+$',
+					},
+					topic: { type: 'string', description: 'Research topic (1~500 chars)' },
+					purpose: {
+						type: 'string',
+						enum: ['library_compare', 'security_audit', 'best_practice', 'debugging'],
+						description: 'Research purpose (default: best_practice)',
+					},
+					model: { type: 'string', description: 'Gemini model (default: gemini-2.5-flash)' },
+					context: { type: 'string', description: 'Additional context (0~2000 chars, optional)' },
+					confirmed: {
+						type: 'boolean',
+						description:
+							'REQUIRED: Caller has obtained user approval for this paid API call. Tool rejects if false.',
+					},
+				},
+				required: ['task_id', 'topic', 'confirmed'],
+			},
+		},
+	],
 }));
 
 // Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-  try {
-    // Remote mode: proxy all calls to REST API
-    if (remote) {
-      const result = await executeRemote(name, (args ?? {}) as Record<string, unknown>);
-      return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-      };
-    }
+	const { name, arguments: args } = request.params;
+	try {
+		// Remote mode: proxy all calls to REST API
+		if (remote) {
+			const result = await executeRemote(name, (args ?? {}) as Record<string, unknown>);
+			return {
+				content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+			};
+		}
 
-    // Local mode: direct service calls
-    let result: unknown;
+		// Local mode: direct service calls
+		let result: unknown;
 
-    switch (name) {
-      // Project tools
-      case 'create_project': {
-        result = await projectService.create({
-          name: args?.name as string,
-          description: args?.description as string | undefined,
-          github_repo: args?.github_repo as string | undefined,
-        });
-        break;
-      }
-      case 'list_projects': {
-        result = { projects: await projectService.getAll() };
-        break;
-      }
-      case 'get_project': {
-        const project = await projectService.getById(args?.project_id as string);
-        if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${args?.project_id}`);
-        const epics = await projectService.getEpics(project.id);
-        result = { project, epics };
-        break;
-      }
-      case 'create_epic': {
-        result = await projectService.createEpic({
-          project_id: args?.project_id as string,
-          title: args?.title as string,
-          description: args?.description as string | undefined,
-          priority: args?.priority as number | undefined,
-        });
-        break;
-      }
-      // Task tools
-      case 'create_task': {
-        result = await taskService.create({
-          title: args?.title as string,
-          epic_id: args?.epic_id as string | undefined,
-          description: args?.description as string | undefined,
-          priority: args?.priority as number | undefined,
-          assignee: args?.assignee as string | undefined,
-          parent_id: args?.parent_id as string | undefined,
-          created_by: 'ai',
-        });
-        break;
-      }
-      case 'decompose_task': {
-        result = await taskService.decompose(
-          args?.task_id as string,
-          args?.subtasks as { title: string; description?: string; priority?: number; estimated_hrs?: number }[],
-        );
-        break;
-      }
-      case 'update_task_status': {
-        result = await taskService.updateStatus(
-          args?.task_id as string,
-          args?.status as string,
-          args?.notes as string | undefined,
-        );
-        break;
-      }
-      case 'set_priority': {
-        result = await taskService.setPriority(
-          args?.task_id as string,
-          args?.priority as number,
-          args?.reason as string,
-        );
-        break;
-      }
-      case 'add_dependency': {
-        result = await taskService.addDependency(
-          args?.task_id as string,
-          args?.depends_on_id as string,
-        );
-        break;
-      }
-      case 'get_task': {
-        const task = await taskService.getById(args?.task_id as string);
-        if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${args?.task_id}`);
-        const subtasks = await taskService.getSubtasks(task.id);
-        result = { task, subtasks };
-        break;
-      }
-      case 'list_tasks': {
-        result = {
-          tasks: await taskService.getAll({
-            project_id: args?.project_id as string | undefined,
-            epic_id: args?.epic_id as string | undefined,
-            status: args?.status as string | undefined,
-            assignee: args?.assignee as string | undefined,
-          }),
-        };
-        break;
-      }
-      // Context tools (Phase 2)
-      case 'get_session_context': {
-        result = await contextService.getSessionContext(args?.project_id as string);
-        break;
-      }
-      case 'get_project_status': {
-        result = await contextService.getProjectStatus(args?.project_id as string);
-        break;
-      }
-      case 'get_blocking_analysis': {
-        result = await contextService.getBlockingAnalysis(args?.project_id as string);
-        break;
-      }
-      // Export/Import tools
-      case 'export_project': {
-        result = await exportService.exportProject(
-          args?.project_id as string,
-          args?.format as 'json' | 'csv',
-        );
-        break;
-      }
-      case 'import_project': {
-        result = await exportService.importProject(
-          args?.data as any,
-          { overwrite: args?.overwrite as boolean | undefined },
-        );
-        break;
-      }
-      // Test & Fix tools (Phase 3)
-      case 'run_tests': {
-        result = await testService.runTests(
-          args?.task_id as string,
-          args?.results as { test_type: string; status: string; output?: string; failures?: string; duration_ms?: number }[],
-        );
-        break;
-      }
-      case 'report_test_result': {
-        result = await testService.reportTestResult(
-          args?.task_id as string,
-          args?.result as 'pass' | 'fail',
-          args?.failures as { file?: string; line?: number; message: string }[] | undefined,
-        );
-        break;
-      }
-      case 'create_fix_task': {
-        result = await testService.createFixTask(
-          args?.parent_task_id as string,
-          args?.issue_description as string,
-          args?.files_changed as { path: string; diff?: string }[] | undefined,
-        );
-        break;
-      }
-      case 'get_fix_history': {
-        result = await testService.getFixHistory(args?.task_id as string);
-        break;
-      }
-      case 'escalate_to_human': {
-        result = await testService.escalateToHuman(
-          args?.task_id as string,
-          args?.reason as string,
-        );
-        break;
-      }
-      // GitHub tools (Phase 4)
-      case 'link_pr_to_task': {
-        result = await githubService.linkPrToTask(
-          args?.task_id as string,
-          args?.pr_url as string,
-        );
-        break;
-      }
-      case 'get_pr_status': {
-        result = await githubService.getPrStatus(args?.task_id as string);
-        break;
-      }
-      case 'create_github_issue': {
-        result = await githubService.createGithubIssue(
-          args?.task_id as string,
-          args?.project_id as string,
-          args?.labels as string[] | undefined,
-        );
-        break;
-      }
-      case 'sync_commit_progress': {
-        result = await githubService.syncCommitProgress(
-          args?.task_id as string,
-          args?.commit_hash as string,
-          args?.notes as string | undefined,
-          args?.message as string | undefined,
-          args?.files_changed as number | undefined,
-          args?.additions as number | undefined,
-          args?.deletions as number | undefined,
-        );
-        break;
-      }
-      // Activity tools
-      case 'get_task_activities': {
-        const task = await taskService.getById(args?.task_id as string);
-        if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${args?.task_id}`);
-        const limit = (args?.limit as number) || 20;
-        result = { activities: await activityRepo.findByTask(task.id, limit) };
-        break;
-      }
-      case 'get_project_activities': {
-        const projectId = args?.project_id as string;
-        const projLimit = (args?.limit as number) || 30;
-        const tasks = await taskService.getAll({ project_id: projectId });
-        const taskIds = tasks.map(t => t.id);
-        if (taskIds.length === 0) {
-          result = { activities: [] };
-        } else {
-          const activityArrays = await Promise.all(taskIds.map(tid => activityRepo.findByTask(tid, projLimit)));
-          const allActivities = activityArrays.flat();
-          allActivities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-          result = { activities: allActivities.slice(0, projLimit) };
-        }
-        break;
-      }
-      case 'get_task_time_summary': {
-        const taskId = args?.task_id as string;
-        if (!taskId) throw new Error('task_id가 필요합니다');
-        const task = await taskService.getById(taskId);
-        if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
-        result = await timeTrackingService.getTimeSummary(task.id);
-        break;
-      }
-      // Subagent tools
-      case 'smart_workflow': {
-        const action = args?.action as string;
-        switch (action) {
-          case 'start_work':
-            result = await workflowService.startWork(args?.task_id as string);
-            break;
-          case 'submit_test':
-            result = await workflowService.submitTest(
-              args?.task_id as string,
-              args?.test_results as { test_type: string; status: string; output?: string; failures?: string; duration_ms?: number }[],
-            );
-            break;
-          case 'complete_fix':
-            result = await workflowService.completeFix(args?.task_id as string, args?.notes as string | undefined);
-            break;
-          case 'approve_review':
-            result = await workflowService.approveReview(args?.task_id as string, args?.notes as string | undefined);
-            break;
-          case 'request_changes': {
-            if (!args?.issues || typeof args.issues !== 'string') {
-              throw new Error('issues 매개변수가 필요합니다 (20자 이상 리뷰 이슈 설명)');
-            }
-            result = await workflowService.requestChanges(args.task_id as string, args.issues);
-            break;
-          }
-          default:
-            throw new Error(`알 수 없는 워크플로우 액션: ${action}`);
-        }
-        break;
-      }
-      case 'auto_analyze': {
-        const analysisType = args?.analysis_type as string;
-        switch (analysisType) {
-          case 'daily_report':
-            result = await analysisService.dailyReport(args?.project_id as string);
-            break;
-          case 'bottleneck':
-            result = await analysisService.bottleneck(args?.project_id as string);
-            break;
-          case 'velocity':
-            result = await analysisService.velocity(args?.project_id as string);
-            break;
-          default:
-            throw new Error(`알 수 없는 분석 타입: ${analysisType}`);
-        }
-        break;
-      }
-      case 'manage_automation': {
-        const automationAction = args?.action as string;
-        switch (automationAction) {
-          case 'list':
-            result = { rules: await automationService.listRules(args?.project_id as string) };
-            break;
-          case 'create':
-            result = await automationService.createRule(
-              args?.project_id as string,
-              args?.name as string,
-              args?.trigger_event as AutomationTrigger,
-              args?.action_type as AutomationAction,
-              args?.condition as string | undefined,
-              args?.action_config as string | undefined,
-            );
-            break;
-          case 'delete':
-            await automationService.deleteRule(args?.rule_id as string);
-            result = { message: '규칙 삭제 완료' };
-            break;
-          case 'toggle':
-            result = await automationService.toggleRule(args?.rule_id as string);
-            break;
-          default:
-            throw new Error(`알 수 없는 자동화 액션: ${automationAction}`);
-        }
-        break;
-      }
-      // Priority recommendation tools
-      case 'analyze_task_priority': {
-        result = await priorityRecommendationService.analyzePriority(args?.task_id as string);
-        break;
-      }
-      case 'get_priority_suggestions': {
-        result = await priorityRecommendationService.suggestPriorityAdjustments(args?.project_id as string);
-        break;
-      }
-      // Workload analysis tools
-      case 'get_workload_analysis': {
-        result = await workloadService.getWorkloadByAssignee(args?.project_id as string);
-        break;
-      }
-      // Auto-assignment tools
-      case 'suggest_assignee': {
-        result = await autoAssignmentService.suggestAssignee(args?.task_id as string);
-        break;
-      }
-      case 'get_assignment_recommendations': {
-        result = await autoAssignmentService.assignRecommendations(args?.project_id as string);
-        break;
-      }
-      // Template tools
-      case 'create_task_template': {
-        result = await templateService.createTemplate({
-          project_id: args?.project_id as string,
-          name: args?.name as string,
-          description: args?.description as string | undefined,
-          priority: args?.priority as number | undefined,
-          estimated_hrs: args?.estimated_hrs as number | undefined,
-          subtasks: args?.subtasks as any[] | undefined,
-        });
-        break;
-      }
-      case 'list_task_templates': {
-        result = { templates: await templateService.getTemplates(args?.project_id as string) };
-        break;
-      }
-      case 'apply_task_template': {
-        result = await templateService.applyTemplate(
-          args?.template_id as string,
-          {
-            title: args?.title as string | undefined,
-            epic_id: args?.epic_id as string | undefined,
-            description: args?.description as string | undefined,
-            priority: args?.priority as number | undefined,
-            estimated_hrs: args?.estimated_hrs as number | undefined,
-            assignee: args?.assignee as string | undefined,
-          }
-        );
-        break;
-      }
-      // Research tools
-      case 'research_with_gemini': {
-        const input: ResearchInput = {
-          task_id: args?.task_id as string,
-          topic: args?.topic as string,
-          purpose: args?.purpose as ResearchInput['purpose'],
-          model: args?.model as string | undefined,
-          context: args?.context as string | undefined,
-          confirmed: args?.confirmed as boolean,
-        };
-        result = await researchService.executeResearch(input);
-        break;
-      }
-      default:
-        throw new Error(`Unknown tool: ${name}`);
-    }
+		switch (name) {
+			// Project tools
+			case 'create_project': {
+				result = await projectService.create({
+					name: args?.name as string,
+					description: args?.description as string | undefined,
+					github_repo: args?.github_repo as string | undefined,
+				});
+				break;
+			}
+			case 'list_projects': {
+				result = { projects: await projectService.getAll() };
+				break;
+			}
+			case 'get_project': {
+				const project = await projectService.getById(args?.project_id as string);
+				if (!project) throw new Error(`프로젝트를 찾을 수 없습니다: ${args?.project_id}`);
+				const epics = await projectService.getEpics(project.id);
+				result = { project, epics };
+				break;
+			}
+			case 'create_epic': {
+				result = await projectService.createEpic({
+					project_id: args?.project_id as string,
+					title: args?.title as string,
+					description: args?.description as string | undefined,
+					priority: args?.priority as number | undefined,
+				});
+				break;
+			}
+			// Task tools
+			case 'create_task': {
+				result = await taskService.create({
+					title: args?.title as string,
+					epic_id: args?.epic_id as string | undefined,
+					description: args?.description as string | undefined,
+					priority: args?.priority as number | undefined,
+					assignee: args?.assignee as string | undefined,
+					parent_id: args?.parent_id as string | undefined,
+					created_by: 'ai',
+				});
+				break;
+			}
+			case 'decompose_task': {
+				result = await taskService.decompose(
+					args?.task_id as string,
+					args?.subtasks as {
+						title: string;
+						description?: string;
+						priority?: number;
+						estimated_hrs?: number;
+					}[],
+				);
+				break;
+			}
+			case 'update_task_status': {
+				result = await taskService.updateStatus(
+					args?.task_id as string,
+					args?.status as string,
+					args?.notes as string | undefined,
+				);
+				break;
+			}
+			case 'set_priority': {
+				result = await taskService.setPriority(
+					args?.task_id as string,
+					args?.priority as number,
+					args?.reason as string,
+				);
+				break;
+			}
+			case 'add_dependency': {
+				result = await taskService.addDependency(
+					args?.task_id as string,
+					args?.depends_on_id as string,
+				);
+				break;
+			}
+			case 'get_task': {
+				const task = await taskService.getById(args?.task_id as string);
+				if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${args?.task_id}`);
+				const subtasks = await taskService.getSubtasks(task.id);
+				result = { task, subtasks };
+				break;
+			}
+			case 'list_tasks': {
+				result = {
+					tasks: await taskService.getAll({
+						project_id: args?.project_id as string | undefined,
+						epic_id: args?.epic_id as string | undefined,
+						status: args?.status as string | undefined,
+						assignee: args?.assignee as string | undefined,
+					}),
+				};
+				break;
+			}
+			// Context tools (Phase 2)
+			case 'get_session_context': {
+				result = await contextService.getSessionContext(args?.project_id as string);
+				break;
+			}
+			case 'get_project_status': {
+				result = await contextService.getProjectStatus(args?.project_id as string);
+				break;
+			}
+			case 'get_blocking_analysis': {
+				result = await contextService.getBlockingAnalysis(args?.project_id as string);
+				break;
+			}
+			// Export/Import tools
+			case 'export_project': {
+				result = await exportService.exportProject(
+					args?.project_id as string,
+					args?.format as 'json' | 'csv',
+				);
+				break;
+			}
+			case 'import_project': {
+				result = await exportService.importProject(
+					args?.data as Parameters<typeof exportService.importProject>[0],
+					{
+						overwrite: args?.overwrite as boolean | undefined,
+					},
+				);
+				break;
+			}
+			// Test & Fix tools (Phase 3)
+			case 'run_tests': {
+				result = await testService.runTests(
+					args?.task_id as string,
+					args?.results as {
+						test_type: string;
+						status: string;
+						output?: string;
+						failures?: string;
+						duration_ms?: number;
+					}[],
+				);
+				break;
+			}
+			case 'report_test_result': {
+				result = await testService.reportTestResult(
+					args?.task_id as string,
+					args?.result as 'pass' | 'fail',
+					args?.failures as { file?: string; line?: number; message: string }[] | undefined,
+				);
+				break;
+			}
+			case 'create_fix_task': {
+				result = await testService.createFixTask(
+					args?.parent_task_id as string,
+					args?.issue_description as string,
+					args?.files_changed as { path: string; diff?: string }[] | undefined,
+				);
+				break;
+			}
+			case 'get_fix_history': {
+				result = await testService.getFixHistory(args?.task_id as string);
+				break;
+			}
+			case 'escalate_to_human': {
+				result = await testService.escalateToHuman(args?.task_id as string, args?.reason as string);
+				break;
+			}
+			// GitHub tools (Phase 4)
+			case 'link_pr_to_task': {
+				result = await githubService.linkPrToTask(args?.task_id as string, args?.pr_url as string);
+				break;
+			}
+			case 'get_pr_status': {
+				result = await githubService.getPrStatus(args?.task_id as string);
+				break;
+			}
+			case 'create_github_issue': {
+				result = await githubService.createGithubIssue(
+					args?.task_id as string,
+					args?.project_id as string,
+					args?.labels as string[] | undefined,
+				);
+				break;
+			}
+			case 'sync_commit_progress': {
+				result = await githubService.syncCommitProgress(
+					args?.task_id as string,
+					args?.commit_hash as string,
+					args?.notes as string | undefined,
+					args?.message as string | undefined,
+					args?.files_changed as number | undefined,
+					args?.additions as number | undefined,
+					args?.deletions as number | undefined,
+				);
+				break;
+			}
+			// Activity tools
+			case 'get_task_activities': {
+				const task = await taskService.getById(args?.task_id as string);
+				if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${args?.task_id}`);
+				const limit = (args?.limit as number) || 20;
+				result = { activities: await activityRepo.findByTask(task.id, limit) };
+				break;
+			}
+			case 'get_project_activities': {
+				const projectId = args?.project_id as string;
+				const projLimit = (args?.limit as number) || 30;
+				const tasks = await taskService.getAll({ project_id: projectId });
+				const taskIds = tasks.map((t) => t.id);
+				if (taskIds.length === 0) {
+					result = { activities: [] };
+				} else {
+					const activityArrays = await Promise.all(
+						taskIds.map((tid) => activityRepo.findByTask(tid, projLimit)),
+					);
+					const allActivities = activityArrays.flat();
+					allActivities.sort(
+						(a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+					);
+					result = { activities: allActivities.slice(0, projLimit) };
+				}
+				break;
+			}
+			case 'get_task_time_summary': {
+				const taskId = args?.task_id as string;
+				if (!taskId) throw new Error('task_id가 필요합니다');
+				const task = await taskService.getById(taskId);
+				if (!task) throw new Error(`태스크를 찾을 수 없습니다: ${taskId}`);
+				result = await timeTrackingService.getTimeSummary(task.id);
+				break;
+			}
+			// Subagent tools
+			case 'smart_workflow': {
+				const action = args?.action as string;
+				switch (action) {
+					case 'start_work':
+						result = await workflowService.startWork(args?.task_id as string);
+						break;
+					case 'submit_test':
+						result = await workflowService.submitTest(
+							args?.task_id as string,
+							args?.test_results as {
+								test_type: string;
+								status: string;
+								output?: string;
+								failures?: string;
+								duration_ms?: number;
+							}[],
+						);
+						break;
+					case 'complete_fix':
+						result = await workflowService.completeFix(
+							args?.task_id as string,
+							args?.notes as string | undefined,
+						);
+						break;
+					case 'approve_review':
+						result = await workflowService.approveReview(
+							args?.task_id as string,
+							args?.notes as string | undefined,
+						);
+						break;
+					case 'request_changes': {
+						if (!args?.issues || typeof args.issues !== 'string') {
+							throw new Error('issues 매개변수가 필요합니다 (20자 이상 리뷰 이슈 설명)');
+						}
+						result = await workflowService.requestChanges(args.task_id as string, args.issues);
+						break;
+					}
+					default:
+						throw new Error(`알 수 없는 워크플로우 액션: ${action}`);
+				}
+				break;
+			}
+			case 'auto_analyze': {
+				const analysisType = args?.analysis_type as string;
+				switch (analysisType) {
+					case 'daily_report':
+						result = await analysisService.dailyReport(args?.project_id as string);
+						break;
+					case 'bottleneck':
+						result = await analysisService.bottleneck(args?.project_id as string);
+						break;
+					case 'velocity':
+						result = await analysisService.velocity(args?.project_id as string);
+						break;
+					default:
+						throw new Error(`알 수 없는 분석 타입: ${analysisType}`);
+				}
+				break;
+			}
+			case 'manage_automation': {
+				const automationAction = args?.action as string;
+				switch (automationAction) {
+					case 'list':
+						result = { rules: await automationService.listRules(args?.project_id as string) };
+						break;
+					case 'create':
+						result = await automationService.createRule(
+							args?.project_id as string,
+							args?.name as string,
+							args?.trigger_event as AutomationTrigger,
+							args?.action_type as AutomationAction,
+							args?.condition as string | undefined,
+							args?.action_config as string | undefined,
+						);
+						break;
+					case 'delete':
+						await automationService.deleteRule(args?.rule_id as string);
+						result = { message: '규칙 삭제 완료' };
+						break;
+					case 'toggle':
+						result = await automationService.toggleRule(args?.rule_id as string);
+						break;
+					default:
+						throw new Error(`알 수 없는 자동화 액션: ${automationAction}`);
+				}
+				break;
+			}
+			// Priority recommendation tools
+			case 'analyze_task_priority': {
+				result = await priorityRecommendationService.analyzePriority(args?.task_id as string);
+				break;
+			}
+			case 'get_priority_suggestions': {
+				result = await priorityRecommendationService.suggestPriorityAdjustments(
+					args?.project_id as string,
+				);
+				break;
+			}
+			// Workload analysis tools
+			case 'get_workload_analysis': {
+				result = await workloadService.getWorkloadByAssignee(args?.project_id as string);
+				break;
+			}
+			// Auto-assignment tools
+			case 'suggest_assignee': {
+				result = await autoAssignmentService.suggestAssignee(args?.task_id as string);
+				break;
+			}
+			case 'get_assignment_recommendations': {
+				result = await autoAssignmentService.assignRecommendations(args?.project_id as string);
+				break;
+			}
+			// Template tools
+			case 'create_task_template': {
+				result = await templateService.createTemplate({
+					project_id: args?.project_id as string,
+					name: args?.name as string,
+					description: args?.description as string | undefined,
+					priority: args?.priority as number | undefined,
+					estimated_hrs: args?.estimated_hrs as number | undefined,
+					subtasks: args?.subtasks as any[] | undefined,
+				});
+				break;
+			}
+			case 'list_task_templates': {
+				result = { templates: await templateService.getTemplates(args?.project_id as string) };
+				break;
+			}
+			case 'apply_task_template': {
+				result = await templateService.applyTemplate(args?.template_id as string, {
+					title: args?.title as string | undefined,
+					epic_id: args?.epic_id as string | undefined,
+					description: args?.description as string | undefined,
+					priority: args?.priority as number | undefined,
+					estimated_hrs: args?.estimated_hrs as number | undefined,
+					assignee: args?.assignee as string | undefined,
+				});
+				break;
+			}
+			// Research tools
+			case 'research_with_gemini': {
+				const input: ResearchInput = {
+					task_id: args?.task_id as string,
+					topic: args?.topic as string,
+					purpose: args?.purpose as ResearchInput['purpose'],
+					model: args?.model as string | undefined,
+					context: args?.context as string | undefined,
+					confirmed: args?.confirmed as boolean,
+				};
+				result = await researchService.executeResearch(input);
+				break;
+			}
+			default:
+				throw new Error(`Unknown tool: ${name}`);
+		}
 
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    };
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error));
-    const classified = classifyError(err);
-    return {
-      content: [{ type: 'text', text: JSON.stringify({ error: classified.code, message: classified.message }) }],
-      isError: true,
-    };
-  }
+		return {
+			content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+		};
+	} catch (error) {
+		const err = error instanceof Error ? error : new Error(String(error));
+		const classified = classifyError(err);
+		return {
+			content: [
+				{
+					type: 'text',
+					text: JSON.stringify({ error: classified.code, message: classified.message }),
+				},
+			],
+			isError: true,
+		};
+	}
 });
 
 // Start server
 async function main() {
-  if (!remote) {
-    await runMigrations();
-  }
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('AI PM MCP Server running on stdio');
+	if (!remote) {
+		await runMigrations();
+	}
+	const transport = new StdioServerTransport();
+	await server.connect(transport);
+	console.error('AI PM MCP Server running on stdio');
 }
 
 main().catch((error) => {
-  console.error('Failed to start server:', error);
-  process.exit(1);
+	console.error('Failed to start server:', error);
+	process.exit(1);
 });

@@ -16,8 +16,8 @@
  * 의존성: Node.js builtin만 사용 (다른 service에 의존하지 않음 — 순환 차단)
  */
 
-import { promises as fs } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import { promises as fs } from 'node:fs';
 
 // ──────────────────────────────────────────────────────────────────
 // 상수
@@ -43,8 +43,8 @@ export const URL_MAX_COUNT_DEFAULT = 50;
  * @returns 마스킹된 문자열 (예: "AIza***", "***")
  */
 export function maskApiKey(key: string | null | undefined): string {
-  if (!key || key.length < 8) return '***';
-  return `${key.slice(0, 4)}***`;
+	if (!key || key.length < 8) return '***';
+	return `${key.slice(0, 4)}***`;
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -63,19 +63,19 @@ export function maskApiKey(key: string | null | undefined): string {
  * @returns 마스킹된 메시지
  */
 export function sanitizeErrorMessage(rawMessage: string, apiKey?: string): string {
-  let out = rawMessage;
-  // 1) 현재 사용 중인 키 자체 (정확 매치)
-  if (apiKey && apiKey.length > 0) {
-    const escaped = apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    out = out.replace(new RegExp(escaped, 'g'), maskApiKey(apiKey));
-  }
-  // 2) Google API 키 일반 패턴
-  out = out.replace(/AIza[0-9A-Za-z_\-]{20,}/g, 'AIza***');
-  // 3) URL 쿼리 파라미터 키
-  out = out.replace(/([?&]key=)[^&\s]+/gi, '$1***');
-  // 4) Authorization 헤더 (Bearer/Basic)
-  out = out.replace(/(Bearer|Basic)\s+[A-Za-z0-9+/_\-=.]{16,}/gi, '$1 ***');
-  return out;
+	let out = rawMessage;
+	// 1) 현재 사용 중인 키 자체 (정확 매치)
+	if (apiKey && apiKey.length > 0) {
+		const escaped = apiKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+		out = out.replace(new RegExp(escaped, 'g'), maskApiKey(apiKey));
+	}
+	// 2) Google API 키 일반 패턴
+	out = out.replace(/AIza[0-9A-Za-z_\-]{20,}/g, 'AIza***');
+	// 3) URL 쿼리 파라미터 키
+	out = out.replace(/([?&]key=)[^&\s]+/gi, '$1***');
+	// 4) Authorization 헤더 (Bearer/Basic)
+	out = out.replace(/(Bearer|Basic)\s+[A-Za-z0-9+/_\-=.]{16,}/gi, '$1 ***');
+	return out;
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -83,12 +83,12 @@ export function sanitizeErrorMessage(rawMessage: string, apiKey?: string): strin
 // ──────────────────────────────────────────────────────────────────
 
 export interface PromptInjectionMarkers {
-  /** 16자 hex (64-bit) 무작위 nonce */
-  nonce: string;
-  /** 시작 마커 (예: "===== USER_INPUT_START [abc123...] =====") */
-  startMarker: string;
-  /** 종료 마커 */
-  endMarker: string;
+	/** 16자 hex (64-bit) 무작위 nonce */
+	nonce: string;
+	/** 시작 마커 (예: "===== USER_INPUT_START [abc123...] =====") */
+	startMarker: string;
+	/** 종료 마커 */
+	endMarker: string;
 }
 
 /**
@@ -98,12 +98,12 @@ export interface PromptInjectionMarkers {
  * @returns nonce + startMarker + endMarker
  */
 export function buildPromptInjectionMarkers(): PromptInjectionMarkers {
-  const nonce = randomBytes(8).toString('hex');
-  return {
-    nonce,
-    startMarker: `===== USER_INPUT_START [${nonce}] =====`,
-    endMarker: `===== USER_INPUT_END [${nonce}] =====`,
-  };
+	const nonce = randomBytes(8).toString('hex');
+	return {
+		nonce,
+		startMarker: `===== USER_INPUT_START [${nonce}] =====`,
+		endMarker: `===== USER_INPUT_END [${nonce}] =====`,
+	};
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ export function buildPromptInjectionMarkers(): PromptInjectionMarkers {
  * @returns sanitized 문자열
  */
 export function sanitizeUserInput(input: string): string {
-  return input.replace(/`/g, '​`');
+	return input.replace(/`/g, '​`');
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -126,10 +126,10 @@ export function sanitizeUserInput(input: string): string {
 // ──────────────────────────────────────────────────────────────────
 
 export interface AtomicWriteOptions {
-  /** 파일 인코딩 (기본: 'utf8') */
-  encoding?: BufferEncoding;
-  /** 파일 권한 모드 (기본: 0o600 — 소유자 RW만) */
-  mode?: number;
+	/** 파일 인코딩 (기본: 'utf8') */
+	encoding?: BufferEncoding;
+	/** 파일 권한 모드 (기본: 0o600 — 소유자 RW만) */
+	mode?: number;
 }
 
 /**
@@ -143,20 +143,20 @@ export interface AtomicWriteOptions {
  * @throws fs.writeFile/rename 에러 (호출자가 분류)
  */
 export async function atomicWrite(
-  filePath: string,
-  content: string,
-  opts?: AtomicWriteOptions,
+	filePath: string,
+	content: string,
+	opts?: AtomicWriteOptions,
 ): Promise<void> {
-  const encoding = opts?.encoding ?? 'utf8';
-  const mode = opts?.mode ?? 0o600;
-  const tmpPath = `${filePath}.tmp-${randomBytes(4).toString('hex')}`;
-  try {
-    await fs.writeFile(tmpPath, content, { encoding, mode });
-    await fs.rename(tmpPath, filePath);
-  } catch (err) {
-    await fs.unlink(tmpPath).catch(() => undefined);
-    throw err;
-  }
+	const encoding = opts?.encoding ?? 'utf8';
+	const mode = opts?.mode ?? 0o600;
+	const tmpPath = `${filePath}.tmp-${randomBytes(4).toString('hex')}`;
+	try {
+		await fs.writeFile(tmpPath, content, { encoding, mode });
+		await fs.rename(tmpPath, filePath);
+	} catch (err) {
+		await fs.unlink(tmpPath).catch(() => undefined);
+		throw err;
+	}
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -164,9 +164,9 @@ export async function atomicWrite(
 // ──────────────────────────────────────────────────────────────────
 
 export interface ValidateTaskIdResult {
-  valid: boolean;
-  /** valid=false일 때 사유 메시지 */
-  error?: string;
+	valid: boolean;
+	/** valid=false일 때 사유 메시지 */
+	error?: string;
 }
 
 /**
@@ -177,25 +177,25 @@ export interface ValidateTaskIdResult {
  * @returns valid + 사유
  */
 export function validateTaskId(
-  taskId: unknown,
-  maxLen: number = TASK_ID_MAX_LEN_DEFAULT,
+	taskId: unknown,
+	maxLen: number = TASK_ID_MAX_LEN_DEFAULT,
 ): ValidateTaskIdResult {
-  if (typeof taskId !== 'string') {
-    return { valid: false, error: 'task_id는 문자열이어야 합니다.' };
-  }
-  if (!TICKET_PATTERN.test(taskId)) {
-    return {
-      valid: false,
-      error: `task_id 형식이 올바르지 않습니다. 예: APS-1-1 (정규식: ^[A-Z]+(-\\d+)+$). 입력값: ${taskId}`,
-    };
-  }
-  if (taskId.length > maxLen) {
-    return {
-      valid: false,
-      error: `task_id는 ${maxLen}자를 초과할 수 없습니다 (현재: ${taskId.length}자).`,
-    };
-  }
-  return { valid: true };
+	if (typeof taskId !== 'string') {
+		return { valid: false, error: 'task_id는 문자열이어야 합니다.' };
+	}
+	if (!TICKET_PATTERN.test(taskId)) {
+		return {
+			valid: false,
+			error: `task_id 형식이 올바르지 않습니다. 예: APS-1-1 (정규식: ^[A-Z]+(-\\d+)+$). 입력값: ${taskId}`,
+		};
+	}
+	if (taskId.length > maxLen) {
+		return {
+			valid: false,
+			error: `task_id는 ${maxLen}자를 초과할 수 없습니다 (현재: ${taskId.length}자).`,
+		};
+	}
+	return { valid: true };
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -203,10 +203,10 @@ export function validateTaskId(
 // ──────────────────────────────────────────────────────────────────
 
 export interface FilterSafeUrlsOptions {
-  /** 단일 URL 최대 길이 (기본: 2048자) */
-  maxUrlLen?: number;
-  /** 결과 배열 최대 개수 (기본: 50) */
-  maxCount?: number;
+	/** 단일 URL 최대 길이 (기본: 2048자) */
+	maxUrlLen?: number;
+	/** 결과 배열 최대 개수 (기본: 50) */
+	maxCount?: number;
 }
 
 /**
@@ -222,27 +222,27 @@ export interface FilterSafeUrlsOptions {
  * @returns 안전 URL 배열 (순서 보존, cap 적용)
  */
 export function filterSafeUrls(urls: string[], opts?: FilterSafeUrlsOptions): string[] {
-  const maxUrlLen = opts?.maxUrlLen ?? URL_MAX_LEN_DEFAULT;
-  const maxCount = opts?.maxCount ?? URL_MAX_COUNT_DEFAULT;
-  const out: string[] = [];
-  for (const raw of urls) {
-    if (typeof raw !== 'string') continue;
-    const trimmed = raw.trim();
-    if (trimmed.length === 0) continue;
-    if (trimmed.length > maxUrlLen) continue;
-    const lower = trimmed.toLowerCase();
-    if (
-      lower.startsWith('javascript:') ||
-      lower.startsWith('data:') ||
-      lower.startsWith('file://')
-    ) {
-      continue;
-    }
-    if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
-      continue;
-    }
-    out.push(trimmed);
-    if (out.length >= maxCount) break;
-  }
-  return out;
+	const maxUrlLen = opts?.maxUrlLen ?? URL_MAX_LEN_DEFAULT;
+	const maxCount = opts?.maxCount ?? URL_MAX_COUNT_DEFAULT;
+	const out: string[] = [];
+	for (const raw of urls) {
+		if (typeof raw !== 'string') continue;
+		const trimmed = raw.trim();
+		if (trimmed.length === 0) continue;
+		if (trimmed.length > maxUrlLen) continue;
+		const lower = trimmed.toLowerCase();
+		if (
+			lower.startsWith('javascript:') ||
+			lower.startsWith('data:') ||
+			lower.startsWith('file://')
+		) {
+			continue;
+		}
+		if (!lower.startsWith('http://') && !lower.startsWith('https://')) {
+			continue;
+		}
+		out.push(trimmed);
+		if (out.length >= maxCount) break;
+	}
+	return out;
 }

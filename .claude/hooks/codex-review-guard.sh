@@ -100,15 +100,18 @@ if [[ -n "$TICKET" ]]; then
     HAS_CODEX_REVIEW=0
     HAS_CODEX_CHALLENGE=0
 
-    if grep -qiE "codex.{0,10}review" "$REVIEW_PATH" 2>/dev/null; then
+    # 독립 리뷰(2번째): codex review 또는 Claude 대체(security-reviewer)
+    # codex 미가용 환경(모델 미지원 등)을 위해 code-review.md "Claude 대체 3중" 정책 반영
+    if grep -qiE "(codex.{0,10}review|security[- ]?review)" "$REVIEW_PATH" 2>/dev/null; then
       HAS_CODEX_REVIEW=1
     fi
-    if grep -qiE "(codex.{0,10}challenge|adversarial|challenge mode)" "$REVIEW_PATH" 2>/dev/null; then
+    # 적대적 검증(3번째): codex challenge 또는 Claude 대체(critic adversarial)
+    if grep -qiE "(codex.{0,10}challenge|adversarial|challenge mode|critic)" "$REVIEW_PATH" 2>/dev/null; then
       HAS_CODEX_CHALLENGE=1
     fi
 
     NOTES_HAS_CODEX=0
-    if echo "$NOTES" | grep -qiE "codex"; then
+    if echo "$NOTES" | grep -qiE "(codex|security[- ]?review|critic.{0,20}adversarial)"; then
       NOTES_HAS_CODEX=1
     fi
 

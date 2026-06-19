@@ -1,71 +1,65 @@
 {
-  "$schema": "https://json.schemastore.org/claude-code-plugin.json",
-  "id": "ai-pm-system",
-  "name": "AI PM System",
-  "version": "1.0.0",
-  "description": "AI-powered project management system with ticket-first development workflow",
-  "author": "AI PM System Team",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/your-org/ai-pm-system.git"
-  },
-  "keywords": [
-    "project-management",
-    "tickets",
-    "workflow",
-    "mcp",
-    "automation"
-  ],
-  "mcpServers": {
-    "ai-pm-system": {
-      "command": "node",
-      "args": ["{{PLUGIN_DIR}}/packages/mcp-server/dist/index.js"],
-      "env": {
-        "DB_PATH": "{{PLUGIN_DIR}}/data/pm.db"
-      },
-      "description": "AI PM System MCP server for ticket-based project management",
-      "tools": [
-        "create_project",
-        "get_project_status",
-        "create_epic",
-        "create_task",
-        "update_task_status",
-        "smart_workflow",
-        "add_comment",
-        "get_task_history",
-        "get_active_tasks"
-      ]
-    }
-  },
-  "installation": {
-    "preInstall": [
-      {
-        "type": "command",
-        "command": "pnpm install",
-        "description": "Installing dependencies..."
-      },
-      {
-        "type": "command",
-        "command": "pnpm -r build",
-        "description": "Building MCP server..."
-      }
-    ],
-    "postInstall": [
-      {
-        "type": "command",
-        "command": "node scripts/init-db.js",
-        "description": "Initializing database...",
-        "optional": true
-      }
-    ]
-  },
-  "activation": {
-    "instructions": "AI PM System has been installed. Use ticket-first development workflow:\n\n1. Create project: create_project()\n2. Create epic: create_epic()\n3. Create task: create_task(epic_id=...)\n4. Start work: smart_workflow(task_id, 'start_work')\n5. Submit test: smart_workflow(task_id, 'submit_test')\n6. Approve review: smart_workflow(task_id, 'approve_review')\n\nSee CLAUDE.md and AGENTS.md for detailed workflow."
-  },
-  "minClaudeCodeVersion": "0.1.0",
-  "compatibility": {
-    "os": ["darwin", "linux", "win32"],
-    "node": ">=18.0.0"
-  }
+	"$schema": "https://json.schemastore.org/claude-code-plugin.json",
+	"id": "ai-pm-system",
+	"name": "AI PM System",
+	"version": "1.0.0",
+	"description": "AI-powered project management system with ticket-first development workflow",
+	"author": "AI PM System Team",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/your-org/ai-pm-system.git"
+	},
+	"keywords": ["project-management", "tickets", "workflow", "mcp", "automation"],
+	"mcpServers": {
+		"ai-pm-system": {
+			"command": "node",
+			"args": ["{{PLUGIN_DIR}}/packages/mcp-server/dist/index.js"],
+			"env": {
+				"DB_PATH": "{{PLUGIN_DIR}}/data/pm.db"
+			},
+			"description": "AI PM System MCP server for ticket-based project management",
+			"tools": [
+				"create_project",
+				"get_project_status",
+				"create_epic",
+				"create_task",
+				"update_task_status",
+				"smart_workflow",
+				"add_comment",
+				"get_task_history",
+				"get_active_tasks"
+			]
+		}
+	},
+	"installation": {
+		"preInstall": [
+			{
+				"type": "command",
+				"command": "pnpm install",
+				"description": "Installing dependencies..."
+			},
+			{
+				"type": "command",
+				"command": "pnpm -r build",
+				"description": "Building MCP server..."
+			}
+		],
+		"postInstall": [
+			{
+				"type": "command",
+				"command": "node scripts/init-db.js",
+				"description": "Initializing database...",
+				"optional": true
+			}
+		]
+	},
+	"activation": {
+		"instructions": "AI PM System has been installed. Use ticket-first development workflow:\n\n1. Create project: create_project()\n2. Create epic: create_epic()\n3. Create task: create_task(epic_id=...)\n4. Start work: smart_workflow(task_id, 'start_work')\n5. Submit test: smart_workflow(task_id, 'submit_test')\n6. Approve review: smart_workflow(task_id, 'approve_review')\n\nSee CLAUDE.md and AGENTS.md for detailed workflow."
+	},
+	"minClaudeCodeVersion": "0.1.0",
+	"compatibility": {
+		"os": ["darwin", "linux", "win32"],
+		"node": ">=18.0.0"
+	}
 }

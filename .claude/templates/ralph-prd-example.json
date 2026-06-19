@@ -1,45 +1,45 @@
 {
-  "_example": "AI PM System 특화 동작 예시 — 'MCP 도구에 입력 검증 추가' 가상 작업. 실제 스택(pnpm, vitest, packages/mcp-server) 기준 acceptanceCriteria 작성법 시연.",
-  "_usage": "이 파일을 참고해 .omc/prd.json 을 작성한 뒤 `/oh-my-claudecode:ralph <작업설명>` 실행. ralph 가 priority 순으로 스토리를 하나씩 구현·검증.",
-  "userStories": [
-    {
-      "id": "US-001",
-      "title": "입력 검증 유틸 함수 추가",
-      "description": "MCP 도구 입력값을 검증하는 공유 헬퍼를 services/_security-base.ts 에 추가. task_id·문자열 길이·허용 문자를 검사한다.",
-      "acceptanceCriteria": [
-        "packages/mcp-server/src/services/_security-base.ts 에 validateInput 함수가 존재한다",
-        "validateInput('') 는 { valid: false } 를 반환한다",
-        "validateInput('APS-1-1') 는 { valid: true } 를 반환한다",
-        "pnpm --filter @ai-pm/mcp-server build 가 0 에러로 통과한다"
-      ],
-      "priority": 1,
-      "passes": false
-    },
-    {
-      "id": "US-002",
-      "title": "create_task 도구에 검증 연결",
-      "description": "US-001 의 validateInput 을 create_task 핸들러에 연결하여 잘못된 입력을 조기 차단한다.",
-      "acceptanceCriteria": [
-        "create_task 핸들러가 validateInput 을 호출한다",
-        "빈 title 로 호출 시 명확한 에러 메시지를 반환한다(throw 아님)",
-        "기존 정상 입력 동작은 회귀 없이 유지된다",
-        "pnpm --filter @ai-pm/mcp-server build 가 0 에러로 통과한다"
-      ],
-      "priority": 2,
-      "passes": false
-    },
-    {
-      "id": "US-003",
-      "title": "회귀 테스트 추가",
-      "description": "US-001·US-002 의 동작을 고정하는 vitest 테스트를 추가한다.",
-      "acceptanceCriteria": [
-        "packages/mcp-server/src/__tests__/_security-base.test.ts 에 validateInput 테스트 케이스가 추가된다",
-        "정상/빈값/특수문자 3종 케이스를 모두 커버한다",
-        "pnpm --filter @ai-pm/mcp-server test 가 전체 통과한다",
-        "lint(biome check) 가 신규 파일에 대해 0 경고로 통과한다"
-      ],
-      "priority": 3,
-      "passes": false
-    }
-  ]
+	"_example": "AI PM System 특화 동작 예시 — 'MCP 도구에 입력 검증 추가' 가상 작업. 실제 스택(pnpm, vitest, packages/mcp-server) 기준 acceptanceCriteria 작성법 시연.",
+	"_usage": "이 파일을 참고해 .omc/prd.json 을 작성한 뒤 `/oh-my-claudecode:ralph <작업설명>` 실행. ralph 가 priority 순으로 스토리를 하나씩 구현·검증.",
+	"userStories": [
+		{
+			"id": "US-001",
+			"title": "입력 검증 유틸 함수 추가",
+			"description": "MCP 도구 입력값을 검증하는 공유 헬퍼를 services/_security-base.ts 에 추가. task_id·문자열 길이·허용 문자를 검사한다.",
+			"acceptanceCriteria": [
+				"packages/mcp-server/src/services/_security-base.ts 에 validateInput 함수가 존재한다",
+				"validateInput('') 는 { valid: false } 를 반환한다",
+				"validateInput('APS-1-1') 는 { valid: true } 를 반환한다",
+				"pnpm --filter @ai-pm/mcp-server build 가 0 에러로 통과한다"
+			],
+			"priority": 1,
+			"passes": false
+		},
+		{
+			"id": "US-002",
+			"title": "create_task 도구에 검증 연결",
+			"description": "US-001 의 validateInput 을 create_task 핸들러에 연결하여 잘못된 입력을 조기 차단한다.",
+			"acceptanceCriteria": [
+				"create_task 핸들러가 validateInput 을 호출한다",
+				"빈 title 로 호출 시 명확한 에러 메시지를 반환한다(throw 아님)",
+				"기존 정상 입력 동작은 회귀 없이 유지된다",
+				"pnpm --filter @ai-pm/mcp-server build 가 0 에러로 통과한다"
+			],
+			"priority": 2,
+			"passes": false
+		},
+		{
+			"id": "US-003",
+			"title": "회귀 테스트 추가",
+			"description": "US-001·US-002 의 동작을 고정하는 vitest 테스트를 추가한다.",
+			"acceptanceCriteria": [
+				"packages/mcp-server/src/__tests__/_security-base.test.ts 에 validateInput 테스트 케이스가 추가된다",
+				"정상/빈값/특수문자 3종 케이스를 모두 커버한다",
+				"pnpm --filter @ai-pm/mcp-server test 가 전체 통과한다",
+				"lint(biome check) 가 신규 파일에 대해 0 경고로 통과한다"
+			],
+			"priority": 3,
+			"passes": false
+		}
+	]
 }
