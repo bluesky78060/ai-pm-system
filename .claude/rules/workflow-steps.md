@@ -11,6 +11,7 @@ paths:
 1. `smart_workflow(task_id, 'start_work')` → in_progress (배분과 동시에 실행)
 
 2. 빌드/테스트 실행 후 `smart_workflow(task_id, 'submit_test', test_results=[...])` (build 필수, output 10자+)
+   - **STRICT 모드 (APS-1-9)**: 환경변수 `STRICT_SUBMIT_TEST_PROJECTS`에 프로젝트 코드(예: `APS`)가 포함되면 `build`+`lint`+`unit` 3종을 모두 제출하고 전 항목 `status: 'pass'`여야 통과. 누락/fail/skip 시 거부됨. 미설정 프로젝트는 기존 동작(build만 필수). 테스트는 `test_type: 'unit'`으로 라벨링.
 
 3. **code-reviewer 에이전트** (`/code-review` 스킬)로 리뷰 후 `smart_workflow(task_id, 'approve_review', notes='...')` (20자+)
    - **리뷰 notes 필수 형식**:

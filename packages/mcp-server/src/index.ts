@@ -84,6 +84,7 @@ const server = new Server(
    - 스킬: /autopilot, /ultrawork, /ecomode, /ultrapilot, /ralph, /tdd
 4. 빌드/테스트 실행 후 smart_workflow(task_id, 'submit_test', test_results=[...])
    - build 타입 필수, output 10자 이상 (실제 빌드 출력)
+   - STRICT 모드(STRICT_SUBMIT_TEST_PROJECTS에 프로젝트 코드 포함 시): build+lint+unit 모두 제출 + 전 항목 status:pass 필수 (누락/fail/skip 거부)
    - 실패시: build-fixer(sonnet) 또는 /build-fix 스킬 사용
 5. code-reviewer(opus) 또는 /code-review 스킬로 리뷰 수행
    smart_workflow(task_id, 'approve_review', notes='리뷰결과') (20자 이상)

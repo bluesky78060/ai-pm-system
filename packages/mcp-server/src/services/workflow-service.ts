@@ -2,6 +2,7 @@ import { v4 as uuid } from 'uuid';
 import { ActivityRepository } from '../db/repositories/activity-repo.js';
 import { EpicRepository } from '../db/repositories/epic-repo.js';
 import { FixAttemptRepository } from '../db/repositories/fix-attempt-repo.js';
+import { ProjectRepository } from '../db/repositories/project-repo.js';
 import { TaskRepository } from '../db/repositories/task-repo.js';
 import { TestRunRepository } from '../db/repositories/test-run-repo.js';
 import type { FixAttempt, Task } from '../types/index.js';
@@ -16,14 +17,61 @@ export interface TestResult {
 	duration_ms?: number;
 }
 
+/**
+ * validateStrictResults (APS-1-9): STRICT 모드에서 build+lint+unit 필수 + 모든 항목 status==='pass' 강제.
+ * 순수 함수(DB 비의존)로 단위 테스트 가능. isStrict는 호출자가 주입.
+ * - 비-strict: 추가 검증 없음 (기존 동작 보존)
+ * - strict: 필수 타입 누락 또는 비-pass(skip 포함) 항목이 있으면 throw
+ */
+export function validateStrictResults(results: TestResult[], isStrict: boolean): void {
+	if (!isStrict) return;
+	const REQUIRED = ['build', 'lint', 'unit'] as const;
+	const present = new Set(results.map((r) => r.test_type));
+	const missing = REQUIRED.filter((t) => !present.has(t));
+	if (missing.length > 0) {
+		throw new Error(
+			`STRICT 검증: 필수 타입 누락 [${missing.join(', ')}]. build·lint·unit 모두 제출하고 status=pass여야 합니다.`,
+		);
+	}
+	const notPassed = results.filter((r) => r.status !== 'pass');
+	if (notPassed.length > 0) {
+		throw new Error(
+			`STRICT 검증: 통과하지 않은 항목 [${notPassed.map((r) => `${r.test_type}(${r.status})`).join(', ')}]. 모든 검증이 status=pass여야 합니다 (skip 불가).`,
+		);
+	}
+}
+
 export class WorkflowService {
 	private taskRepo = new TaskRepository();
 	private activityRepo = new ActivityRepository();
 	private testRunRepo = new TestRunRepository();
 	private fixAttemptRepo = new FixAttemptRepository();
 	private epicRepo = new EpicRepository();
+	private projectRepo = new ProjectRepository();
 	private taskService = new TaskService();
 	private contextService = new ContextService();
+
+	/**
+	 * resolveStrict (APS-1-9): STRICT_SUBMIT_TEST_PROJECTS 플래그에 이 태스크의 프로젝트 코드가
+	 * 포함되는지 판정. task→epic→project 조회는 어느 hop이든 null/miss 시 false 폴백(설계된 안전 경로).
+	 * 매칭은 case-exact 대문자 — auto-generate 코드는 대문자이나 명시 생성 코드는 그대로 저장되므로,
+	 * operator가 실제 저장된 project.code 값에 맞춰 플래그를 설정해야 함.
+	 * 플래그는 호출 시점에 읽어 테스트의 env 조작이 반영되게 함.
+	 */
+	private async resolveStrict(task: Task): Promise<boolean> {
+		const strictProjects = (process.env.STRICT_SUBMIT_TEST_PROJECTS ?? '')
+			.split(',')
+			.map((s) => s.trim())
+			.filter(Boolean);
+		if (strictProjects.length === 0) return false;
+		const epicId = task.epic_id ?? null;
+		if (!epicId) return false;
+		const epic = await this.epicRepo.findById(epicId);
+		if (!epic?.project_id) return false;
+		const project = await this.projectRepo.findById(epic.project_id);
+		const code = project?.code ?? null;
+		return !!code && strictProjects.includes(code);
+	}
 
 	/**
 	 * startWork: 태스크를 in_progress로 전환하고 관련 컨텍스트를 반환합니다.
@@ -111,6 +159,11 @@ export class WorkflowService {
 			console.error(`[WorkflowService] Task not found: ${taskId}`);
 			throw new Error('태스크를 찾을 수 없습니다');
 		}
+
+		// STRICT 검증 (APS-1-9): 플래그 활성 프로젝트는 build+lint+unit 필수 + 전 항목 pass.
+		// 기존 task lookup(found) 재사용. testing 전환 전에 검증하여 실패 시 상태 불변.
+		const isStrict = await this.resolveStrict(found);
+		validateStrictResults(results, isStrict);
 
 		let task = found;
 
