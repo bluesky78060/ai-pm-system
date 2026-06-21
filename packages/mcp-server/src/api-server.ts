@@ -670,7 +670,7 @@ app.post(
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const staticPath = process.env.STATIC_PATH ?? path.join(__dirname, '../../web-ui/dist');
 app.use(express.static(staticPath));
-app.get('*', (_req, res) => {
+app.get('/{*splat}', (_req, res) => {
 	res.sendFile(path.join(staticPath, 'index.html'));
 });
 
