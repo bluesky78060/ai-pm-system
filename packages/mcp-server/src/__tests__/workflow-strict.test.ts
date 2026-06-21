@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { type TestResult, validateStrictResults } from '../services/workflow-service.js';
+import {
+	type TestResult,
+	matchesStrictFlag,
+	validateStrictResults,
+} from '../services/workflow-service.js';
 
 // APS-1-9: validateStrictResults는 순수 함수(DB 비의존)라 격리 단위 테스트 가능.
 const pass = (test_type: string): TestResult => ({
@@ -49,5 +53,38 @@ describe('validateStrictResults (APS-1-9 STRICT 검증)', () => {
 			{ test_type: 'integration', status: 'skip', output: 'x'.repeat(10) },
 		];
 		expect(() => validateStrictResults(results, true)).toThrow(/integration|skip|통과하지 않은/);
+	});
+});
+
+describe('matchesStrictFlag (APS-1-10 플래그 매칭)', () => {
+	it('코드가 플래그에 포함 → true', () => {
+		expect(matchesStrictFlag('APS', 'APS')).toBe(true);
+		expect(matchesStrictFlag('APS', 'APS,DIET')).toBe(true);
+		expect(matchesStrictFlag('DIET', 'APS,DIET')).toBe(true);
+	});
+
+	it('코드가 플래그에 없음 → false', () => {
+		expect(matchesStrictFlag('DIET', 'APS')).toBe(false);
+		expect(matchesStrictFlag('SLS', 'APS,DIET')).toBe(false);
+	});
+
+	it('code가 null → false (조회 실패 폴백)', () => {
+		expect(matchesStrictFlag(null, 'APS')).toBe(false);
+	});
+
+	it('플래그 빈값/미설정 → false', () => {
+		expect(matchesStrictFlag('APS', '')).toBe(false);
+		expect(matchesStrictFlag('APS', undefined)).toBe(false);
+		expect(matchesStrictFlag('APS', '   ')).toBe(false);
+	});
+
+	it('case-exact 매칭 (소문자 불일치 → false)', () => {
+		expect(matchesStrictFlag('aps', 'APS')).toBe(false);
+		expect(matchesStrictFlag('APS', 'aps')).toBe(false);
+	});
+
+	it('공백/trailing 콤마 정규화 (trim + filter)', () => {
+		expect(matchesStrictFlag('DIET', ' APS , DIET ')).toBe(true);
+		expect(matchesStrictFlag('APS', 'APS,')).toBe(true);
 	});
 });

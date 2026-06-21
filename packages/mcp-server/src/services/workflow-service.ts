@@ -41,6 +41,19 @@ export function validateStrictResults(results: TestResult[], isStrict: boolean):
 	}
 }
 
+/**
+ * matchesStrictFlag (APS-1-10): 프로젝트 코드가 STRICT_SUBMIT_TEST_PROJECTS 플래그에 포함되는지
+ * 판정하는 순수 함수. case-exact 대문자 매칭. code가 null이거나 플래그가 비면 false.
+ * resolveStrict의 DB hop과 분리해 단위 테스트로 매칭 로직(흔한 regression 지점)을 커버.
+ */
+export function matchesStrictFlag(code: string | null, envValue: string | undefined): boolean {
+	const strictProjects = (envValue ?? '')
+		.split(',')
+		.map((s) => s.trim())
+		.filter(Boolean);
+	return !!code && strictProjects.includes(code);
+}
+
 export class WorkflowService {
 	private taskRepo = new TaskRepository();
 	private activityRepo = new ActivityRepository();
@@ -59,18 +72,16 @@ export class WorkflowService {
 	 * 플래그는 호출 시점에 읽어 테스트의 env 조작이 반영되게 함.
 	 */
 	private async resolveStrict(task: Task): Promise<boolean> {
-		const strictProjects = (process.env.STRICT_SUBMIT_TEST_PROJECTS ?? '')
-			.split(',')
-			.map((s) => s.trim())
-			.filter(Boolean);
-		if (strictProjects.length === 0) return false;
+		const envValue = process.env.STRICT_SUBMIT_TEST_PROJECTS;
+		// 플래그가 비었으면 DB 조회 생략 (성능)
+		if (!(envValue ?? '').trim()) return false;
 		const epicId = task.epic_id ?? null;
 		if (!epicId) return false;
 		const epic = await this.epicRepo.findById(epicId);
 		if (!epic?.project_id) return false;
 		const project = await this.projectRepo.findById(epic.project_id);
-		const code = project?.code ?? null;
-		return !!code && strictProjects.includes(code);
+		// 매칭 판정은 순수 함수로 위임 (단위 테스트 대상)
+		return matchesStrictFlag(project?.code ?? null, envValue);
 	}
 
 	/**
