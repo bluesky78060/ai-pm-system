@@ -42,16 +42,25 @@ export function validateStrictResults(results: TestResult[], isStrict: boolean):
 }
 
 /**
+ * parseStrictProjects (APS-1-11): STRICT_SUBMIT_TEST_PROJECTS 플래그 문자열을
+ * 정규화된 프로젝트 코드 배열로 파싱. split(',') 후 trim + 빈 항목 제거.
+ * resolveStrict의 early-return과 matchesStrictFlag가 동일 정규화를 공유하므로,
+ * comma-only 플래그(",")·공백만 있는 값도 빈 목록으로 처리되어 불필요한 DB 조회를 생략한다.
+ */
+export function parseStrictProjects(envValue: string | undefined): string[] {
+	return (envValue ?? '')
+		.split(',')
+		.map((s) => s.trim())
+		.filter(Boolean);
+}
+
+/**
  * matchesStrictFlag (APS-1-10): 프로젝트 코드가 STRICT_SUBMIT_TEST_PROJECTS 플래그에 포함되는지
  * 판정하는 순수 함수. case-exact 대문자 매칭. code가 null이거나 플래그가 비면 false.
  * resolveStrict의 DB hop과 분리해 단위 테스트로 매칭 로직(흔한 regression 지점)을 커버.
  */
 export function matchesStrictFlag(code: string | null, envValue: string | undefined): boolean {
-	const strictProjects = (envValue ?? '')
-		.split(',')
-		.map((s) => s.trim())
-		.filter(Boolean);
-	return !!code && strictProjects.includes(code);
+	return !!code && parseStrictProjects(envValue).includes(code);
 }
 
 export class WorkflowService {
@@ -73,8 +82,8 @@ export class WorkflowService {
 	 */
 	private async resolveStrict(task: Task): Promise<boolean> {
 		const envValue = process.env.STRICT_SUBMIT_TEST_PROJECTS;
-		// 플래그가 비었으면 DB 조회 생략 (성능)
-		if (!(envValue ?? '').trim()) return false;
+		// 유효 코드가 없으면 DB 조회 생략 (성능). comma-only "," 등도 빈 목록으로 처리.
+		if (parseStrictProjects(envValue).length === 0) return false;
 		const epicId = task.epic_id ?? null;
 		if (!epicId) return false;
 		const epic = await this.epicRepo.findById(epicId);

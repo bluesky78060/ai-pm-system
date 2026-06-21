@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	type TestResult,
 	matchesStrictFlag,
+	parseStrictProjects,
 	validateStrictResults,
 } from '../services/workflow-service.js';
 
@@ -86,5 +87,24 @@ describe('matchesStrictFlag (APS-1-10 플래그 매칭)', () => {
 	it('공백/trailing 콤마 정규화 (trim + filter)', () => {
 		expect(matchesStrictFlag('DIET', ' APS , DIET ')).toBe(true);
 		expect(matchesStrictFlag('APS', 'APS,')).toBe(true);
+	});
+});
+
+describe('parseStrictProjects (APS-1-11 정규화 헬퍼)', () => {
+	it('정상 값 → trim된 코드 배열', () => {
+		expect(parseStrictProjects('APS')).toEqual(['APS']);
+		expect(parseStrictProjects(' APS , DIET ')).toEqual(['APS', 'DIET']);
+	});
+
+	it('빈/미설정/공백 → 빈 배열', () => {
+		expect(parseStrictProjects('')).toEqual([]);
+		expect(parseStrictProjects(undefined)).toEqual([]);
+		expect(parseStrictProjects('   ')).toEqual([]);
+	});
+
+	it('comma-only/빈 항목 → 빈 배열 (DB 조회 생략 보장)', () => {
+		expect(parseStrictProjects(',')).toEqual([]);
+		expect(parseStrictProjects(' , , ')).toEqual([]);
+		expect(parseStrictProjects('APS,,')).toEqual(['APS']);
 	});
 });
