@@ -5,13 +5,76 @@
 
 const API_URL = process.env.API_URL;
 
+/**
+ * x-api-key 인증 헤더를 구성합니다. 키가 없거나 trim 후 빈 문자열이면 빈 객체를
+ * 반환하여 미설정 시 기존 동작을 byte-identical 보존합니다(spread = no-op).
+ */
+export function buildAuthHeaders(apiKey: string | undefined): Record<string, string> {
+	const key = (apiKey ?? '').trim();
+	return key ? { 'x-api-key': key } : {};
+}
+
+/**
+ * API_URL이 http:// 비-루프백 채널인지 URL 파싱으로 판정합니다(정규식 우회 차단).
+ * 정규식 방식은 `http://localhost.evil.com`·`http://localhost@evil.com`(실제 host=evil.com)을
+ * 비-루프백인데도 경고 억제하는 약점이 있어 URL 파서로 hostname을 정확히 추출합니다.
+ * 파싱 불가 시 false(경고 안 함) — 다른 검증 경로에 위임.
+ */
+export function isHttpInsecure(apiUrl: string | undefined): boolean {
+	try {
+		const url = new URL(apiUrl ?? '');
+		if (url.protocol !== 'http:') return false;
+		// IPv6 hostname은 `[::1]` 형태로 반환되므로 대괄호 제거 후 비교.
+		const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+		return host !== 'localhost' && host !== '127.0.0.1' && host !== '::1';
+	} catch {
+		return false; // 파싱 불가 → 경고 안 함(다른 검증에 위임)
+	}
+}
+
+/**
+ * 인증 관련 경고 문자열을 산출하는 순수 헬퍼(테스트 가능). 실제 console.warn은
+ * 호출부에서 module-scope 1회성 가드로 수행합니다. 키값 자체는 절대 미포함.
+ */
+export function authWarnings(apiUrl: string | undefined, apiKey: string | undefined): string[] {
+	const warns: string[] = [];
+	const rawSet = apiKey !== undefined;
+	const trimmed = (apiKey ?? '').trim();
+	if (rawSet && trimmed === '') {
+		warns.push('API_KEY is set but empty after trim — requests sent UNAUTHENTICATED.');
+	}
+	// ★MINOR1: http 판정을 정규식→URL 파싱으로 (host 위장 우회 차단)
+	if (trimmed && isHttpInsecure(apiUrl)) {
+		warns.push(
+			'API_URL is http:// (non-localhost) — x-api-key will be sent over an INSECURE channel. Use https://.',
+		);
+	}
+	return warns; // 키값 자체는 절대 미포함
+}
+
+// 인증 경고 1회성 가드 (module-scope)
+let warned = false;
+export function emitAuthWarningsOnce(): void {
+	if (warned) return;
+	warned = true;
+	for (const w of authWarnings(process.env.API_URL, process.env.API_KEY)) {
+		console.warn(`[remote-client] ${w}`);
+	}
+}
+
+/** 테스트 전용: 1회성 경고 가드 플래그를 리셋합니다. */
+export function resetAuthWarningGuard(): void {
+	warned = false;
+}
+
 export function isRemoteMode(): boolean {
+	if (API_URL) emitAuthWarningsOnce();
 	return !!API_URL;
 }
 
 async function get(path: string): Promise<unknown> {
 	const url = `${API_URL}${path}`;
-	const res = await fetch(url);
+	const res = await fetch(url, { headers: buildAuthHeaders(process.env.API_KEY) });
 	if (!res.ok) {
 		const err = await res.json().catch(() => ({ error: res.statusText }));
 		throw new Error((err as { error: string }).error ?? res.statusText);
@@ -23,7 +86,7 @@ async function post(path: string, body?: unknown): Promise<unknown> {
 	const url = `${API_URL}${path}`;
 	const res = await fetch(url, {
 		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
+		headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(process.env.API_KEY) },
 		body: body ? JSON.stringify(body) : undefined,
 	});
 	if (!res.ok) {
@@ -37,7 +100,7 @@ async function patch(path: string, body?: unknown): Promise<unknown> {
 	const url = `${API_URL}${path}`;
 	const res = await fetch(url, {
 		method: 'PATCH',
-		headers: { 'Content-Type': 'application/json' },
+		headers: { 'Content-Type': 'application/json', ...buildAuthHeaders(process.env.API_KEY) },
 		body: body ? JSON.stringify(body) : undefined,
 	});
 	if (!res.ok) {
@@ -49,7 +112,10 @@ async function patch(path: string, body?: unknown): Promise<unknown> {
 
 async function del(path: string): Promise<unknown> {
 	const url = `${API_URL}${path}`;
-	const res = await fetch(url, { method: 'DELETE' });
+	const res = await fetch(url, {
+		method: 'DELETE',
+		headers: buildAuthHeaders(process.env.API_KEY),
+	});
 	if (!res.ok) {
 		const err = await res.json().catch(() => ({ error: res.statusText }));
 		throw new Error((err as { error: string }).error ?? res.statusText);

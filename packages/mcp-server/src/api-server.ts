@@ -684,7 +684,7 @@ app.listen(PORT, () => {
 	if (RENDER_URL) {
 		const INTERVAL = 10 * 60 * 1000;
 		setInterval(() => {
-			fetch(`${RENDER_URL}/api/projects`).catch(() => {});
+			fetch(`${RENDER_URL}/health`).catch(() => {});
 		}, INTERVAL);
 		console.log(`[Keep-alive] Pinging ${RENDER_URL} every 10 minutes`);
 	}

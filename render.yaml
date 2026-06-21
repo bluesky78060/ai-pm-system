@@ -10,7 +10,7 @@ services:
     runtime: docker
     branch: master
     plan: free
-    healthCheckPath: /api/projects
+    healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -20,3 +20,13 @@ services:
         value: /app/packages/web-ui/dist
       - key: STRICT_SUBMIT_TEST_PROJECTS
         value: APS
+      # API_KEY (선택): /api 라우트 x-api-key 인증을 활성화합니다.
+      # 활성화는 수동으로만 (Blueprint 재제거 방지를 위해 sync: false 권장).
+      # ⚠ 활성화 순서 — 서버 선설정 금지:
+      #   ① 본 커밋(healthCheckPath=/health, keep-alive=/health) 배포 후
+      #   ② 로컬 클라이언트 API_KEY 설정 → ③ 여기 Render API_KEY 동일 값 설정.
+      # ⚠ 클라이언트는 키를 trim해 전송하므로 양쪽 값에 surrounding whitespace 금지 (불일치 시 401).
+      # ⚠ API_KEY enforce 시 web-ui SPA의 /api 호출도 401 — SPA 별도 키 전송 필요(본 티켓 범위 외).
+      # Rollback: 이상 시 이 키 삭제 → 서버 옵트인이라 unset = 즉시 무인증 복구.
+      # - key: API_KEY
+      #   sync: false
