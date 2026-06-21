@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<!--
+  AI PM System — 오케스트레이션 개요 문서
+  소스: CLAUDE.md + .claude/rules/*.md (2026-06 기준)
+  보안 정책 준수: inline JS 금지 · 외부 CDN/이미지 금지 · system font only
+-->
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI PM System · 오케스트레이션 개요</title>
+<style>
+  :root {
+    --bg: #fafaf9;
+    --fg: #1f1f1f;
+    --muted: #6b7280;
+    --accent: #c2410c;
+    --accent-soft: #fed7aa;
+    --ok: #166534;
+    --ok-soft: #bbf7d0;
+    --warn: #92400e;
+    --warn-soft: #fef3c7;
+    --danger: #991b1b;
+    --danger-soft: #fecaca;
+    --info: #1e40af;
+    --info-soft: #dbeafe;
+    --code-bg: #f5f5f4;
+    --border: #d6d3d1;
+    --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html { font-size: 15px; scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+    line-height: 1.65;
+    color: var(--fg);
+    background: var(--bg);
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+  header {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  header h1 {
+    margin: 0 0 0.4rem;
+    font-size: 1.7rem;
+    color: var(--accent);
+  }
+  header p.sub {
+    margin: 0;
+    color: var(--muted);
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.8rem;
+  }
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    font-size: 0.75rem;
+    border-radius: 99px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--muted);
+  }
+  .badge.accent { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok-soft); }
+  .badge.info { background: var(--info-soft); color: var(--info); border-color: var(--info-soft); }
+  nav.toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 2rem;
+  }
+  nav.toc h2 {
+    margin: 0 0 0.5rem;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  nav.toc ol {
+    margin: 0;
+    padding-left: 1.3rem;
+    columns: 2;
+    column-gap: 2rem;
+  }
+  nav.toc a {
+    color: var(--fg);
+    text-decoration: none;
+  }
+  nav.toc a:hover { color: var(--accent); text-decoration: underline; }
+  section { margin-bottom: 2.5rem; }
+  h2.sec {
+    font-size: 1.3rem;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.35rem;
+    margin-bottom: 1rem;
+  }
+  h3 { font-size: 1.05rem; margin: 1.3rem 0 0.5rem; }
+  p { margin: 0.5rem 0; }
+  .lead { color: var(--muted); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.8rem 0;
+    font-size: 0.9rem;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 0.45rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--code-bg); font-weight: 600; }
+  code {
+    background: var(--code-bg);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.85em;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin: 0.8rem 0;
+  }
+  .grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .callout {
+    border-left: 4px solid var(--info);
+    background: var(--info-soft);
+    padding: 0.75rem 1rem;
+    border-radius: 0 8px 8px 0;
+    margin: 0.8rem 0;
+  }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout.danger { border-color: var(--danger); background: var(--danger-soft); }
+  .callout strong { color: var(--fg); }
+  .layer-stack { margin: 1rem 0; }
+  .layer {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    margin-bottom: 0.6rem;
+    background: var(--card);
+  }
+  .layer .tag {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+  }
+  .layer.l1 { border-left: 4px solid var(--accent); }
+  .layer.l2 { border-left: 4px solid var(--info); }
+  .layer.l3 { border-left: 4px solid var(--ok); }
+  .flow {
+    counter-reset: step;
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0;
+  }
+  .flow li {
+    position: relative;
+    padding: 0.6rem 0.6rem 0.6rem 3rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    background: var(--card);
+  }
+  .flow li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: 0.7rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1.6rem;
+    height: 1.6rem;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+  .flow li .what { font-weight: 600; }
+  .flow li .detail { color: var(--muted); font-size: 0.88rem; }
+  .pill {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 99px;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+  .pill.r1 { background: var(--ok-soft); color: var(--ok); }
+  .pill.r2 { background: var(--warn-soft); color: var(--warn); }
+  .pill.r3 { background: var(--danger-soft); color: var(--danger); }
+  footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  @media (max-width: 720px) {
+    nav.toc ol { columns: 1; }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+<h1>AI PM System · 오케스트레이션 개요</h1>
+<p class="sub">멀티 에이전트 조율 + 티켓-우선 워크플로우가 어떻게 맞물려 동작하는가</p>
+<div class="meta">
+<span class="badge accent">프로젝트 APS</span>
+<span class="badge">ID 3bc28444…</span>
+<span class="badge info">OMC 4.14.7</span>
+<span class="badge ok">SSOT = ai-pm MCP</span>
+</div>
+</header>
+
+<nav class="toc">
+<h2>목차</h2>
+<ol>
+<li><a href="#arch">1. 2층 오케스트레이션 구조</a></li>
+<li><a href="#workflow">2. 10단계 워크플로우</a></li>
+<li><a href="#agents">3. 에이전트 카탈로그 · 모델 라우팅</a></li>
+<li><a href="#review">4. 리뷰 강도 3단계</a></li>
+<li><a href="#parallel">5. 병렬 실행 패턴</a></li>
+<li><a href="#continuous">6. 연속 실행 원칙</a></li>
+<li><a href="#hooks">7. Hook 강제 차단</a></li>
+<li><a href="#fasttrack">8. Fast-track 단축</a></li>
+<li><a href="#ssot">9. SSOT 경계 · 통합 레이어</a></li>
+<li><a href="#prohibitions">10. 핵심 금지 사항</a></li>
+<li><a href="#protocol">11. 에이전트 통신 · 조율 프로토콜</a></li>
+</ol>
+</nav>
+
+<section id="arch">
+<h2 class="sec">1. 2층 오케스트레이션 구조</h2>
+<p class="lead">두 시스템이 직교(orthogonal)하게 협력한다. 하나는 <em>품질 가이드</em>, 하나는 <em>강제 게이트</em>다.</p>
+<div class="layer-stack">
+<div class="layer l1">
+<div class="tag">Layer 1 · 조율 (품질 가이드)</div>
+<strong>OMC — oh-my-claudecode</strong>
+<p>멀티 에이전트 오케스트레이션 레이어. 전문 에이전트·모델 라우팅·스킬을 조율한다. 위임 규칙, 검증 원칙, 연속 실행을 정의하지만 <em>차단하지는 않는다</em>.</p>
+</div>
+<div class="layer l2">
+<div class="tag">Layer 2 · 워크플로우 SSOT (강제 게이트)</div>
+<strong>ai-pm MCP — 티켓 워크플로우</strong>
+<p>모든 코드 변경의 단일 진실 공급원. 상태 전이(<code>start_work → submit_test → approve_review → done</code>)·리뷰 게이트·활동 로그를 관리한다. 서버가 비정상 전이를 <em>차단</em>한다.</p>
+</div>
+<div class="layer l3">
+<div class="tag">Layer 3 · 보강 통합 (선택적)</div>
+<strong>Superpowers · gstack · OMC 신규 스킬</strong>
+<p>각 단계 디테일을 보강. Superpowers(브레인스토밍·플랜·검증), gstack(배포 자동화), wiki/ultragoal/autoresearch(지식·세션연속·지표최적화).</p>
+</div>
+</div>
+<div class="callout">
+<strong>핵심 원칙:</strong> Hook(강제 차단)과 Superpowers(품질 가이드)는 직교한다. Hook이 통과시킨 호출에 대해서만 Superpowers가 품질을 보강한다.
+</div>
+</section>
+
+<section id="workflow">
+<h2 class="sec">2. 10단계 워크플로우</h2>
+<p class="lead">티켓 발행 → done 전환까지. 사용자는 3단계 "방향 확정"에서 한 번만 승인하면 된다.</p>
+<ol class="flow">
+<li><span class="what">epic_id 확인</span> — <span class="detail"><code>get_project_status</code>로 에픽 조회. null 절대 금지.</span></li>
+<li><span class="what">티켓 발행</span> — <span class="detail"><code>create_task(epic_id="...", title="...")</code></span></li>
+<li><span class="what">Discovery Q&amp;A</span> — <span class="detail">7개 카테고리 문답 → <code>docs/00-discovery/</code>. 선택적 Gemini 리서치(<code>docs/06-research/</code>).</span></li>
+<li><span class="what">플랜 작성</span> — <span class="detail"><code>docs/01-plan/</code> (MD 기본 · HTML 선택). Discovery 산출물 선결 필수.</span></li>
+<li><span class="what">플랜 리뷰</span> — <span class="detail">critic 독립 리뷰 + 메인 오케스트레이터 자체 검토 → <code>docs/02-review/</code>. <em>즉시</em> 다음 단계 진행(사용자 승인 게이트 아님).</span></li>
+<li><span class="what">팀 에이전트 병렬 위임</span> — <span class="detail">파일 소유권 파티셔닝으로 동시 위임.</span></li>
+<li><span class="what">빌드/테스트 → 코드 리뷰 → smart_workflow</span> — <span class="detail">Iron Law 적용. <code>submit_test</code> → <code>approve_review</code> → 자동 done.</span></li>
+<li><span class="what">PR 생성</span> — <span class="detail"><code>/ship</code> (done 상태 확인 후에만).</span></li>
+<li><span class="what">머지/배포</span> — <span class="detail"><code>/land-and-deploy</code> → Render 배포 + 헬스 체크.</span></li>
+<li><span class="what">배포 후 모니터링</span> — <span class="detail"><code>/canary</code> → 콘솔 에러·성능 회귀·스크린샷 비교.</span></li>
+</ol>
+<div class="callout warn">
+<strong>Fast-track:</strong> 1중 분류 단순 변경은 3~5단계(Discovery/플랜/플랜리뷰)를 생략할 수 있다. 8절 참조.
+</div>
+</section>
+
+<section id="agents">
+<h2 class="sec">3. 에이전트 카탈로그 · 모델 라우팅</h2>
+<p class="lead">작업 복잡도에 따라 모델 티어(haiku/sonnet/opus)를 선택한다.</p>
+<table>
+<thead>
+<tr><th>작업 유형</th><th>에이전트</th><th>모델</th><th>bkit 스킬</th></tr>
+</thead>
+<tbody>
+<tr><td>백엔드 API/로직</td><td><code>executor</code></td><td>sonnet</td><td><code>/phase-4-api</code></td></tr>
+<tr><td>복잡한 백엔드</td><td><code>executor-high</code></td><td>opus</td><td><code>/phase-4-api</code></td></tr>
+<tr><td>UI 컴포넌트</td><td><code>designer</code></td><td>sonnet</td><td><code>/phase-5-design-system</code></td></tr>
+<tr><td>복잡한 UI 시스템</td><td><code>designer-high</code></td><td>opus</td><td><code>/phase-5-design-system</code></td></tr>
+<tr><td>간단한 수정</td><td><code>executor-low</code></td><td>haiku</td><td>—</td></tr>
+<tr><td>문서 작성</td><td><code>writer</code></td><td>haiku</td><td><code>/pdca</code></td></tr>
+<tr><td>코드 탐색</td><td><code>explore-medium</code></td><td>sonnet</td><td>—</td></tr>
+<tr><td>보안 검토</td><td><code>security-reviewer</code></td><td>opus</td><td><code>/security-review</code></td></tr>
+<tr><td>빌드 에러</td><td><code>build-fixer</code></td><td>sonnet</td><td><code>/build-fix</code></td></tr>
+<tr><td>플랜/코드 적대적 검증</td><td><code>critic</code></td><td>opus</td><td>—</td></tr>
+</tbody>
+</table>
+<div class="grid2">
+<div class="card">
+<h3>모델 라우팅 기준</h3>
+<p><code>haiku</code> 빠른 조회 · <code>sonnet</code> 표준 · <code>opus</code> 아키텍처·심층 분석.</p>
+</div>
+<div class="card">
+<h3>Fresh subagent 원칙</h3>
+<p>매 태스크마다 컨텍스트 격리된 새 에이전트. 메인 세션 히스토리 상속 금지.</p>
+</div>
+</div>
+</section>
+
+<section id="review">
+<h2 class="sec">4. 리뷰 강도 3단계</h2>
+<p class="lead">변경의 위험도에 따라 리뷰어 수가 달라진다. <code>approve_review</code> 호출 전 적용.</p>
+<table>
+<thead>
+<tr><th>강도</th><th>적용 대상</th><th>리뷰 구성</th></tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="pill r1">1중</span></td>
+<td>UI 스타일·문구, 단일 함수 버그 수정, 리팩터링(동작 보존), 테스트/문서 변경</td>
+<td><code>code-reviewer</code> 1회</td>
+</tr>
+<tr>
+<td><span class="pill r2">2중</span></td>
+<td>외부 API 통합(인증 제외), 새 MCP 도구, 새 React 컴포넌트, 신규 서비스 클래스, 새 의존성</td>
+<td><code>code-reviewer</code> + <code>security-reviewer</code> 병렬</td>
+</tr>
+<tr>
+<td><span class="pill r3">3중</span></td>
+<td>인증/세션/암호화, DB 마이그레이션, 신규 인프라, 결제/금전, 권한 시스템</td>
+<td><code>code-reviewer</code> + <code>security-reviewer</code>(또는 codex review) + <code>critic</code> adversarial challenge</td>
+</tr>
+</tbody>
+</table>
+<div class="callout">
+<strong>Self-healing 자동 루프:</strong> 1차 리뷰에서 <em>MAJOR 이하만</em> 발견되면 메인이 즉시 <code>executor-high</code>에 "수정 + 회귀 테스트" 위임 → 사용자 개입 없이 1라운드 내 자동 재검증.
+</div>
+<div class="callout danger">
+<strong>예외(사용자 확인 필수):</strong> CRITICAL 발견 · 같은 라운드 MAJOR 3건 이상(설계 결함 의심) · 정책/범위 변경.
+</div>
+</section>
+
+<section id="parallel">
+<h2 class="sec">5. 병렬 실행 패턴</h2>
+<div class="grid2">
+<div class="card">
+<h3>병렬화 가능 (적극 적용)</h3>
+<ul>
+<li>코드 리뷰 다중 라운드 → 단일 메시지 병렬 dispatch</li>
+<li>레이어별 풀스택 → DB + API + UI 동시 위임</li>
+<li>빌드 + 테스트 + 린트 동시 실행</li>
+<li>Phase 4 문서 → CLAUDE.md / rules / README 동시</li>
+</ul>
+</div>
+<div class="card">
+<h3>순차 필수 (병렬 금지)</h3>
+<ul>
+<li>동일 파일 동시 수정</li>
+<li>의존성 있는 작업(서비스 → 도구 등록)</li>
+<li>request_changes → submit_test (상태 의존)</li>
+</ul>
+</div>
+</div>
+<p><strong>효과:</strong> 리뷰 라운드 60% 단축, 테스트+구현 병렬 시 50% 단축.</p>
+</section>
+
+<section id="continuous">
+<h2 class="sec">6. 연속 실행 원칙</h2>
+<p class="lead">티켓 발행 후 done까지 단계별 사용자 확인 없이 자율 진행한다.</p>
+<div class="card">
+<h3>3대 규칙</h3>
+<ul>
+<li><strong>단계 사이 확인 질문 금지</strong> — "다음 단계로 진행할까요?" 금지</li>
+<li><strong>암묵적 정지(silent stop) 금지</strong> — 결과 요약만 출력하고 턴 종료 금지. 같은 응답에 다음 도구 호출 포함</li>
+<li><strong>중단 시 전체 보고 의무</strong> — 이슈 전체 목록·영향 범위·결정 사항 모두 명시</li>
+</ul>
+</div>
+<div class="callout warn">
+<strong>중단 허용 예외 (4가지만):</strong> ① BLOCKED(외부 의존성·권한·환경) ② 진짜 모호한 의사결정 ③ CRITICAL 발견 ④ self-healing 3회 실패. 그 외에는 같은 응답에서 다음 도구 호출로 이어간다.
+</div>
+</section>
+
+<section id="hooks">
+<h2 class="sec">7. Hook 강제 차단 (PreToolUse)</h2>
+<p class="lead">품질 가이드와 달리, Hook은 비정상 호출을 기계적으로 <em>차단</em>한다.</p>
+<table>
+<thead>
+<tr><th>Hook</th><th>매처</th><th>차단 대상</th></tr>
+</thead>
+<tbody>
+<tr><td><code>epic-id-guard.sh</code></td><td>create_task</td><td>epic_id null/empty</td></tr>
+<tr><td><code>discovery-guard.sh</code></td><td>Edit/Write(<code>docs/01-plan/</code>)</td><td>Discovery 산출물 누락</td></tr>
+<tr><td><code>plan-review-guard.sh</code></td><td>smart_workflow start_work</td><td>Discovery/Plan/Review 산출물 누락</td></tr>
+<tr><td><code>codex-review-guard.sh</code></td><td>smart_workflow approve_review</td><td>리뷰 산출물 누락 / 중요 변경 codex 미수행</td></tr>
+</tbody>
+</table>
+</section>
+
+<section id="fasttrack">
+<h2 class="sec">8. Fast-track 단축</h2>
+<p class="lead">1중 분류 단순 변경에 한해 Discovery/플랜/플랜리뷰를 생략한다.</p>
+<div class="grid2">
+<div class="card">
+<h3>활성화 절차</h3>
+<ol>
+<li>티켓 발행 (priority 4 권장)</li>
+<li>마커 생성: <code>active-ticket</code> + <code>active-ticket-fasttrack</code> (내용 일치 필수)</li>
+<li>즉시 <code>start_work</code> (guard hook이 마커 감지 → 검증 생략)</li>
+<li>구현 → 빌드 → 1중 리뷰 → approve_review</li>
+</ol>
+</div>
+<div class="card">
+<h3>차단 케이스 (정식 워크플로우)</h3>
+<ul>
+<li>인증/세션/암호화</li>
+<li>DB 마이그레이션</li>
+<li>결제/권한 시스템</li>
+<li>외부 API 신규 통합 · 풀스택 변경</li>
+</ul>
+</div>
+</div>
+<p><strong>단축 효과:</strong> 약 20분 → 8분 (-60%). 산출물은 <code>docs/03-code-review/</code>만 필수.</p>
+</section>
+
+<section id="ssot">
+<h2 class="sec">9. SSOT 경계 · 통합 레이어</h2>
+<p class="lead">정보 종류별로 저장소가 엄격히 분리된다. 중복 기록 금지.</p>
+<table>
+<thead>
+<tr><th>저장소</th><th>담는 것</th><th>담지 않는 것</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>ai-pm MCP</strong></td><td>상태/승인 (워크플로우 SSOT)</td><td>산출물·개인 선호</td></tr>
+<tr><td><code>docs/</code></td><td>워크플로우 산출물 (discovery~research)</td><td>일반 기술 지식</td></tr>
+<tr><td><code>memory/</code></td><td>개인 선호·피드백</td><td>프로젝트 기술 상세</td></tr>
+<tr><td><code>.omc/wiki/</code></td><td>프로젝트 기술 지식(결정 근거·패턴)</td><td>티켓 산출물·개인 선호</td></tr>
+</tbody>
+</table>
+<h3>통합 스킬 역할 분담</h3>
+<div class="grid2">
+<div class="card">
+<h3>gstack (배포)</h3>
+<p><code>/setup-deploy</code> → <code>/ship</code> → <code>/land-and-deploy</code> → <code>/canary</code></p>
+</div>
+<div class="card">
+<h3>OMC 신규 스킬</h3>
+<p><strong>wiki</strong> 기술 지식 축적 · <strong>ultragoal</strong> 대형 작업 세션 연속(ai-pm 보조) · <strong>autoresearch</strong> 단일 지표 최적화</p>
+</div>
+</div>
+<div class="callout">
+<strong>경계 침범 금지:</strong> ultragoal ledger를 ai-pm 티켓 상태와 이중 관리하지 않는다. 공식 상태/승인은 <em>언제나 ai-pm MCP</em> 기준.
+</div>
+</section>
+
+<section id="prohibitions">
+<h2 class="sec">10. 핵심 금지 사항</h2>
+<div class="callout danger">
+<ul>
+<li><strong>티켓 없이 코드 변경 금지</strong> / <strong>epic_id null 금지</strong></li>
+<li><strong>Discovery 산출물 없이 플랜 작성 금지</strong> / <strong>플랜 리뷰 없이 구현 금지</strong></li>
+<li><strong>self-approval 금지</strong> — 작성자 본인이 승인 호출 금지(작성자 ≠ 리뷰어)</li>
+<li><strong>중요 변경</strong>(P0/보안/아키텍처/DB/외부 통합) → Codex 리뷰 + Challenge 3중 검증 필수</li>
+<li><strong>Iron Law</strong> — 검증 명령 실제 실행 증거 없이 완료 주장 금지</li>
+<li><strong>smart_workflow done 이전 PR 생성/push 금지</strong></li>
+<li><strong>5단계 "메인 오케스트레이터 승인"을 사용자 승인 게이트로 오해 금지</strong> — silent-stop 규정 적용</li>
+</ul>
+</div>
+</section>
+
+<section id="protocol">
+<h2 class="sec">11. 에이전트 통신 · 조율 프로토콜</h2>
+<p class="lead">에이전트는 서로 직접 통신하지 않는다. <strong>오케스트레이터 허브 + 공유 상태(blackboard)</strong> 경유의 간접 조율이다.</p>
+
+<div class="callout warn">
+<strong>흔한 오해 교정:</strong> "에이전트들이 서로 메시지를 주고받으며 유기적으로 돈다"는 P2P 그림은 이 시스템에 맞지 않는다. 서브에이전트는 <em>컨텍스트가 격리</em>되어 서로를 볼 수 없다. 유기적 협력은 ① 메인 오케스트레이터(=Claude 본인)의 dispatch/통합과 ② 공유 상태를 통한 간접 핸드오프로 이루어진다. 이는 의도된 설계다 — 격리로 컨텍스트 오염을 막고, 파일 소유권 분리로 충돌을 막는다.
+</div>
+
+<h3>토폴로지: Hub-and-Spoke + Blackboard</h3>
+<svg viewBox="0 0 760 470" role="img" aria-label="에이전트 통신 토폴로지 다이어그램" style="width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff;margin:0.8rem 0">
+<defs>
+<marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+<path d="M0,0 L7,3 L0,6 Z" fill="#6b7280"></path>
+</marker>
+<marker id="arrowO" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+<path d="M0,0 L7,3 L0,6 Z" fill="#c2410c"></path>
+</marker>
+</defs>
+<rect x="40" y="44" width="120" height="42" rx="8" fill="#f5f5f4" stroke="#d6d3d1"></rect>
+<text x="100" y="70" text-anchor="middle" font-size="12.5" fill="#1f1f1f">executor</text>
+<rect x="190" y="44" width="120" height="42" rx="8" fill="#f5f5f4" stroke="#d6d3d1"></rect>
+<text x="250" y="70" text-anchor="middle" font-size="12.5" fill="#1f1f1f">designer</text>
+<rect x="340" y="44" width="120" height="42" rx="8" fill="#f5f5f4" stroke="#d6d3d1"></rect>
+<text x="400" y="70" text-anchor="middle" font-size="12.5" fill="#1f1f1f">code-reviewer</text>
+<rect x="490" y="44" width="120" height="42" rx="8" fill="#f5f5f4" stroke="#d6d3d1"></rect>
+<text x="550" y="70" text-anchor="middle" font-size="11.5" fill="#1f1f1f">security-reviewer</text>
+<rect x="610" y="120" width="110" height="42" rx="8" fill="#f5f5f4" stroke="#d6d3d1"></rect>
+<text x="665" y="146" text-anchor="middle" font-size="12.5" fill="#1f1f1f">critic</text>
+<line x1="100" y1="86" x2="350" y2="196" stroke="#c2410c" stroke-width="1.5" marker-end="url(#arrowO)" marker-start="url(#arrowO)"></line>
+<line x1="250" y1="86" x2="365" y2="196" stroke="#c2410c" stroke-width="1.5" marker-end="url(#arrowO)" marker-start="url(#arrowO)"></line>
+<line x1="400" y1="86" x2="400" y2="196" stroke="#c2410c" stroke-width="1.5" marker-end="url(#arrowO)" marker-start="url(#arrowO)"></line>
+<line x1="550" y1="86" x2="435" y2="196" stroke="#c2410c" stroke-width="1.5" marker-end="url(#arrowO)" marker-start="url(#arrowO)"></line>
+<line x1="610" y1="141" x2="460" y2="205" stroke="#c2410c" stroke-width="1.5" marker-end="url(#arrowO)" marker-start="url(#arrowO)"></line>
+<rect x="300" y="196" width="200" height="58" rx="10" fill="#fed7aa" stroke="#c2410c" stroke-width="2"></rect>
+<text x="400" y="220" text-anchor="middle" font-size="13.5" font-weight="700" fill="#c2410c">메인 오케스트레이터</text>
+<text x="400" y="240" text-anchor="middle" font-size="11" fill="#92400e">Claude 본인 · 유일한 조율자</text>
+<line x1="400" y1="254" x2="400" y2="320" stroke="#1e40af" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrow)" marker-start="url(#arrow)"></line>
+<rect x="120" y="320" width="520" height="118" rx="10" fill="#dbeafe" stroke="#1e40af"></rect>
+<text x="380" y="342" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1e40af">공유 상태 (Blackboard) — 간접 핸드오프 채널</text>
+<rect x="138" y="356" width="150" height="32" rx="6" fill="#fff" stroke="#1e40af"></rect>
+<text x="213" y="376" text-anchor="middle" font-size="11" fill="#1e40af">ai-pm 티켓 (상태 SSOT)</text>
+<rect x="300" y="356" width="92" height="32" rx="6" fill="#fff" stroke="#1e40af"></rect>
+<text x="346" y="376" text-anchor="middle" font-size="11" fill="#1e40af">docs/ 산출물</text>
+<rect x="404" y="356" width="120" height="32" rx="6" fill="#fff" stroke="#1e40af"></rect>
+<text x="464" y="376" text-anchor="middle" font-size="11" fill="#1e40af">shared_memory</text>
+<rect x="536" y="356" width="86" height="32" rx="6" fill="#fff" stroke="#1e40af"></rect>
+<text x="579" y="376" text-anchor="middle" font-size="11" fill="#1e40af">state / 모드</text>
+<rect x="138" y="396" width="92" height="32" rx="6" fill="#fff" stroke="#1e40af"></rect>
+<text x="184" y="416" text-anchor="middle" font-size="11" fill="#1e40af">notepad</text>
+<rect x="242" y="396" width="150" height="32" rx="6" fill="#fff" stroke="#1e40af"></rect>
+<text x="317" y="416" text-anchor="middle" font-size="11" fill="#1e40af">project_memory</text>
+<text x="556" y="416" text-anchor="middle" font-size="10.5" fill="#6b7280">실선=dispatch↔결과 · 점선=공유상태 R/W</text>
+</svg>
+
+<h3>간접 통신 채널 (에이전트가 "유기적"으로 협력하는 실제 방법)</h3>
+<table>
+<thead>
+<tr><th>채널</th><th>도구 / 경로</th><th>전달하는 것</th><th>수명</th></tr>
+</thead>
+<tbody>
+<tr><td>워크플로우 상태</td><td><code>smart_workflow</code> · <code>task_id</code></td><td>단계 전이·승인 게이트 (SSOT)</td><td>티켓 생명주기</td></tr>
+<tr><td>단계 산출물</td><td><code>docs/00~06/</code> 파일</td><td>discovery → plan → review 핸드오프</td><td>영속(저장소)</td></tr>
+<tr><td>세션 간 공유 메모리</td><td><code>shared_memory_*</code></td><td>에이전트/세션 간 키-값</td><td>세션 횡단</td></tr>
+<tr><td>실행 모드 상태</td><td><code>state_*</code></td><td>ralph/ultrawork 등 모드 플래그</td><td>실행 중</td></tr>
+<tr><td>작업 메모</td><td><code>notepad_*</code></td><td>진행 메모·중간 결과</td><td>세션</td></tr>
+<tr><td>프로젝트 영속 메모</td><td><code>project_memory_*</code></td><td>프로젝트 누적 컨텍스트</td><td>영속(로컬)</td></tr>
+</tbody>
+</table>
+
+<h3>동기화 패턴</h3>
+<div class="grid2">
+<div class="card">
+<h3>Fan-out / Fan-in</h3>
+<ul>
+<li><strong>Fan-out</strong>: 단일 메시지 multi tool_use로 독립 에이전트 동시 dispatch</li>
+<li><strong>Fan-in (barrier)</strong>: 결과 전부 수신 후 메인이 통합·판정</li>
+<li>파일 소유권 파티셔닝으로 충돌 방지</li>
+</ul>
+</div>
+<div class="card">
+<h3>핸드오프 / 재개</h3>
+<ul>
+<li><strong>핸드오프</strong>: 에이전트 final message → 메인 → 다음 에이전트(새 컨텍스트)에 전달</li>
+<li><strong>SendMessage</strong>: 기존 에이전트를 컨텍스트 유지한 채 재개</li>
+<li><strong>fork</strong>: 오케스트레이터 컨텍스트 상속한 분신</li>
+</ul>
+</div>
+</div>
+
+<div class="card">
+<h3>실제 흐름 예시 — 코드 리뷰 → self-healing</h3>
+<p style="margin-top:0.4rem">에이전트끼리 직접 말하지 않는다. 모두 메인 경유다.</p>
+<ol>
+<li><code>executor</code> 구현 → final message "완료, 파일 X 수정"을 <em>메인에</em> 반환</li>
+<li>메인이 diff를 <code>code-reviewer</code>에 dispatch (격리된 새 컨텍스트)</li>
+<li><code>code-reviewer</code> "MAJOR 1건" 판정을 <em>메인에</em> 반환</li>
+<li>메인이 self-healing 판단 → <code>executor-high</code>에 "수정 + 회귀 테스트" 위임</li>
+<li>상태는 내내 <code>ai-pm 티켓</code>에 기록 — 다음 단계가 같은 <code>task_id</code>로 이어받음</li>
+</ol>
+</div>
+
+<h3>조정·교정 메커니즘 — A가 B 영역을 건드려야 할 때</h3>
+<p>격리 때문에 A는 B에게 직접 말할 수 없다. 하지만 <strong>A의 결과(final message)에 "B 영역에 이렇게 했으면 좋겠다"는 권고를 실어</strong> 오케스트레이터에 올리면, 오케스트레이터가 중재자로서 B에 반영한다. 단 실시간 push가 아니라 <em>A 종료 시점의 반환(pull)</em>이며, 반영 여부는 오케스트레이터가 판단한다.</p>
+
+<svg viewBox="0 0 760 180" role="img" aria-label="A→오케스트레이터→B 중재 루프 다이어그램" style="width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff;margin:0.8rem 0">
+<defs>
+<marker id="arrow2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+<path d="M0,0 L7,3 L0,6 Z" fill="#c2410c"></path>
+</marker>
+<marker id="arrow2g" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+<path d="M0,0 L7,3 L0,6 Z" fill="#6b7280"></path>
+</marker>
+</defs>
+<rect x="40" y="56" width="150" height="50" rx="8" fill="#f5f5f4" stroke="#d6d3d1"></rect>
+<text x="115" y="80" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1f1f1f">에이전트 A</text>
+<text x="115" y="97" text-anchor="middle" font-size="10.5" fill="#6b7280">(예: code-reviewer)</text>
+<rect x="300" y="56" width="160" height="50" rx="8" fill="#fed7aa" stroke="#c2410c" stroke-width="2"></rect>
+<text x="380" y="80" text-anchor="middle" font-size="12.5" font-weight="700" fill="#c2410c">오케스트레이터</text>
+<text x="380" y="97" text-anchor="middle" font-size="10.5" fill="#92400e">중재 · 반영 판단</text>
+<rect x="570" y="56" width="150" height="50" rx="8" fill="#f5f5f4" stroke="#d6d3d1"></rect>
+<text x="645" y="80" text-anchor="middle" font-size="12.5" font-weight="600" fill="#1f1f1f">에이전트 B</text>
+<text x="645" y="97" text-anchor="middle" font-size="10.5" fill="#6b7280">(예: executor-high)</text>
+<line x1="190" y1="81" x2="296" y2="81" stroke="#c2410c" stroke-width="1.5" marker-end="url(#arrow2)"></line>
+<text x="243" y="44" text-anchor="middle" font-size="10.5" fill="#92400e">① 종료 시 권고 반환</text>
+<line x1="460" y1="81" x2="566" y2="81" stroke="#c2410c" stroke-width="1.5" marker-end="url(#arrow2)"></line>
+<text x="513" y="44" text-anchor="middle" font-size="10.5" fill="#92400e">② 재dispatch + 권고 주입</text>
+<path d="M645,106 C645,160 115,160 115,110" fill="none" stroke="#6b7280" stroke-width="1.3" stroke-dasharray="5,4" marker-end="url(#arrow2g)"></path>
+<text x="380" y="174" text-anchor="middle" font-size="10.5" fill="#6b7280">③ B 변경이 A에도 영향 → A 재투입 (핑퐁 라운드)</text>
+</svg>
+
+<h3>cross-region 조정의 3가지 경로</h3>
+<table>
+<thead>
+<tr><th>경로</th><th>시점</th><th>방식</th><th>한계</th></tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>사전 분해</strong> (예방)</td>
+<td>dispatch 전</td>
+<td>의존성 있는 작업은 순차 강제. B 먼저 실행 → 결과를 A 프롬프트에 주입</td>
+<td>분해를 틀리면(의존성 무시 병렬화) 조정 자체가 불가</td>
+</tr>
+<tr>
+<td><strong>blackboard 읽기</strong> (런타임)</td>
+<td>실행 중</td>
+<td><code>shared_memory</code>/<code>notepad</code>/<code>docs/</code> 비동기 읽기</td>
+<td>이미 써둔 것만 봄. 실시간 협상 불가</td>
+</tr>
+<tr>
+<td><strong>권고 반환 → 재dispatch</strong> (사후 교정)</td>
+<td>A 종료 후</td>
+<td>final message에 권고 → 오케스트레이터 중재 → B 재투입. <code>SendMessage</code>(B 재개)·structured output로 정밀화</td>
+<td>라운드 추가. 상호 의존 시 핑퐁</td>
+</tr>
+</tbody>
+</table>
+
+<div class="callout">
+<strong>self-healing이 이 패턴의 구현체:</strong> <code>code-reviewer</code>(A)가 "executor가 이 MAJOR를 고쳐야 함"을 결과로 반환 → 오케스트레이터가 <code>executor-high</code>(B)에 수정 요구를 담아 재dispatch. A가 B에게 직접 말한 게 아니라 <em>중재를 거친</em> 것이다.
+</div>
+
+<div class="callout warn">
+<strong>핑퐁 비용 → 순차 강제의 이유:</strong> B를 고쳤더니 A도 같이 바뀌어야 하면 A를 다시 띄워야 한다(추가 라운드). A↔B 상호 의존이 강할수록 핑퐁이 늘어난다. 그래서 애초에 <strong>의존 방향을 한쪽으로 정리(B→A 순차)</strong>해 핑퐁을 없애는 것이 핵심이며, 이것이 <code>agent-mapping.md</code> "순차 필수 패턴(병렬 금지)"이 존재하는 이유다.
+</div>
+</section>
+
+<footer>
+<p>소스: <code>CLAUDE.md</code> · <code>.claude/rules/{discovery-and-plan, code-review, continuous-execution, fast-track, prohibitions, agent-mapping, workflow-steps, superpowers-integration, deploy-automation, omc-skills-integration}.md</code></p>
+<p>본 문서는 오케스트레이션 구조를 한눈에 보기 위한 요약본이다. 상세 규칙·강제력은 각 룰 파일이 SSOT다.</p>
+</footer>
+
+</body>
+</html>
