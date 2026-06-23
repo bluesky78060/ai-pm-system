@@ -115,3 +115,24 @@ A↔B 상호 의존으로 재투입(핑퐁)이 반복되면 무한 루프 위험
 - 협력 권고는 **에이전트 결과 보고**의 일부일 뿐, 티켓 상태에 이중 기록 금지
 - **self-healing과의 관계**: 원칙 1의 CROSS-REGION 블록은 §11 "권고 반환 → 재dispatch" 경로를 구조화한 것이고, self-healing 루프(`code-review.md`)는 그 경로의 **한 인스턴스**(code-reviewer 판정으로 트리거)다. 채널은 신규가 아니지만 **블록 형식 자체는 신규 의무**이므로 에이전트 프롬프트/스키마 업데이트가 선결
 - **fast-track과의 관계**: fast-track(1중·단일 영역·단일 에이전트)은 cross-region 대상이 없으므로 본 프로토콜 면제("없음" 트리비얼). 단일 영역 작업에 협력 ceremony 강제 금지
+
+## 라운드 핸드오프 (대형·다세션 작업 한정 opt-in) — APS-2-9
+
+장시간 작업(DB 마이그레이션·대규모 리팩터링·멀티세션 기능 구축)에서 전체 히스토리 누적으로 인한 context rot·실패 시도 오염을 막기 위해, 작업을 **라운드 단위로 끊고** 각 라운드 끝에 승계 메모를 남긴 뒤 **fresh 인스턴스가 요약만 승계**한다. 템플릿: `.claude/templates/round-handoff.md`.
+
+> **여기서 "라운드"는 대형 작업에서 fresh 인스턴스 교체가 일어나는 세션/컨텍스트 경계**를 뜻하며, 일반 티켓의 Phase 진행과 다르다. 일반 단일 티켓·fast-track 작업에는 적용하지 않는다(위 "fast-track과의 관계" 면제 규칙을 그대로 따른다 — 별도 면제 규칙을 신설하지 않음).
+
+### 재시작 주입 규칙
+
+1. 라운드 종료 시 → `.claude/templates/round-handoff.md` 4필드(완료/진행/진입점/**승계 계약**)로 `.omc/ultragoal/<mission>/round-N-handoff.md` 작성.
+2. 다음 라운드 fresh subagent dispatch 시:
+   - "전체 히스토리 대신 `round-(N-1)-handoff.md`만 주입" 지시.
+   - 승계 계약(④) 필드를 프롬프트에 반드시 포함. 모호하면 직전 handoff 또는 `docs/` 산출물 추가 회수.
+3. (보조) 네이티브 `/compact`를 비용 절감으로 호출 가능. 단 **상태 승계의 권위는 파일 핸드오프**다(auto-compaction이 라운드 중간 예측불가 발화해도 파일이 1차 근거). 네이티브 auto-compaction 자동 배선(PreCompact hook 등)은 MVP 제외 — 별도 후속 티켓 (네이티브 compaction 동작은 2026-06 기준).
+
+### 적용 경계 (중복 회피 — 위 §"적용 경계 (중복 회피)"를 그대로 상속)
+
+- **SSOT·이중관리 금지**: 위 적용 경계 규칙대로 상태/승인은 ai-pm MCP가 SSOT. handoff 파일은 진행 메모이며 **티켓 상태를 기록하지 않는다**(티켓 코드는 참조만). 별도 경계 규칙을 신설하지 않고 기존 규칙을 상속한다.
+- **④ 승계 계약 vs 원칙 2 `coord:` 키 (혼동 금지)**: 페이로드(타입·API·DB 스키마)는 유사하나 **채널·수명·용도가 다르다** — ④는 *세션/라운드 경계*의 fresh 인스턴스 승계용 **파일**(미션 종료까지), `coord:`는 *동시·순차 sibling* 계약 공유용 **shared_memory**(티켓 `done` 시 정리). **같은 계약을 두 채널에 이중 기록 금지**(상세 비교표: `round-handoff.md`).
+- **ultragoal 완료 게이트 비중복**: ultragoal 자체 게이트(ai-slop-cleaner+verification+code-review)를 중복 적용하지 않고 ai-pm `approve_review`로 일원화(`omc-skills-integration.md` §2).
+- **워크플로우 우회 금지**: 코드 변경 수반 라운드는 여전히 ai-pm 티켓 필수.
