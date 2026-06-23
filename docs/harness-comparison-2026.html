@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>하네스 엔지니어링 최신 동향 vs ai-pm-system 하네스 — 비교 분석 (2026)</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel2: #1c2330;
+    --border: #2a3140;
+    --text: #e6edf3;
+    --muted: #9aa7b4;
+    --accent: #4493f8;
+    --green: #3fb950;
+    --amber: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", Roboto, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 40px 24px 80px; }
+  header.hero {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    background: linear-gradient(135deg, #161b22 0%, #1c2330 100%);
+    margin-bottom: 28px;
+  }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 700;
+    margin: 0 0 10px;
+  }
+  h1 { font-size: 30px; line-height: 1.25; margin: 0 0 12px; }
+  h2 {
+    font-size: 22px;
+    margin: 44px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 17px; margin: 24px 0 10px; }
+  p { color: var(--text); }
+  .sub { color: var(--muted); font-size: 14px; margin: 0; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .chip {
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: #0d1117;
+    color: var(--muted);
+  }
+  .chip strong { color: var(--text); }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--panel);
+    border-radius: 0 10px 10px 0;
+    padding: 16px 20px;
+    margin: 18px 0;
+  }
+  .callout.warn { border-left-color: var(--amber); }
+  .callout .q { color: var(--muted); font-style: italic; }
+  .formula {
+    text-align: center;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 22px;
+    margin: 22px 0;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .formula .plus { color: var(--accent); }
+  .formula .harness { color: var(--green); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } .wrap { padding: 24px 16px 60px; } }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel);
+    padding: 18px 20px;
+  }
+  .card h4 { margin: 0 0 6px; font-size: 15px; }
+  .card .tag { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; background: var(--panel2); }
+  tr:last-child td { border-bottom: none; }
+  td code, p code, li code {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-size: 12.5px;
+    color: var(--purple);
+    font-family: "SF Mono", ui-monospace, "Cascadia Code", Menlo, monospace;
+  }
+  .score { font-weight: 700; white-space: nowrap; }
+  .s-high { color: var(--green); }
+  .s-mid { color: var(--amber); }
+  .s-low { color: var(--red); }
+  .dim-block {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin: 16px 0;
+    overflow: hidden;
+  }
+  .dim-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--panel2);
+  }
+  .dim-head .title { font-weight: 700; font-size: 15px; }
+  .dim-body { padding: 4px 18px 16px; }
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  @media (max-width: 760px) { .twocol { grid-template-columns: 1fr; } }
+  .twocol .col { padding: 14px 16px; }
+  .twocol .col.left { border-right: 1px solid var(--border); }
+  @media (max-width: 760px) { .twocol .col.left { border-right: none; border-bottom: 1px solid var(--border); } }
+  .col .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; font-weight: 700; }
+  .col.left .label { color: var(--accent); }
+  .col.right .label { color: var(--green); }
+  ul.tight { margin: 6px 0; padding-left: 18px; }
+  ul.tight li { margin: 4px 0; }
+  .gap {
+    margin: 0 18px 16px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: rgba(210, 153, 34, 0.08);
+    border: 1px solid rgba(210, 153, 34, 0.3);
+    font-size: 13.5px;
+  }
+  .gap b { color: var(--amber); }
+  .gap.ok {
+    background: rgba(63, 185, 80, 0.07);
+    border-color: rgba(63, 185, 80, 0.3);
+  }
+  .gap.ok b { color: var(--green); }
+  .verdict {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 24px;
+    background: linear-gradient(135deg, rgba(68,147,248,0.08), rgba(63,185,80,0.06));
+    margin: 18px 0;
+  }
+  .source-list { font-size: 13px; color: var(--muted); }
+  .source-list a { color: var(--accent); text-decoration: none; word-break: break-all; }
+  .source-list li { margin: 6px 0; }
+  footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12.5px; }
+  .legend { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">Harness Engineering · 비교 분석</p>
+  <h1>최신 하네스 엔지니어링 동향 vs <code>ai-pm-system</code> 하네스</h1>
+  <p class="sub">2025~2026 업계 모범 사례를 웹에서 수집해, 본 프로젝트의 티켓-우선 워크플로우 · PreToolUse 가드 · 멀티에이전트 오케스트레이션 하네스와 항목별로 대조한다.</p>
+  <div class="meta-row">
+    <span class="chip">작성일 <strong>2026-06-21</strong></span>
+    <span class="chip">대상 <strong>ai-pm-system (APS)</strong></span>
+    <span class="chip">출처 <strong>Anthropic · OpenAI · Claude Code Docs 외 12종</strong></span>
+    <span class="chip">수집 방식 <strong>WebSearch 크롤링</strong></span>
+  </div>
+</header>
+
+<div class="callout warn">
+  <strong>수집 한계 명시</strong><br>
+  본 환경에서 <code>WebFetch</code>(본문 직접 읽기) 권한이 거부되어, 최신 동향은 <code>WebSearch</code> 결과 요약과 그 안에 포함된 <span class="q">1차 출처 직접 인용 문구</span>에 근거한다. 모든 URL은 실재 확인된 1차/권위 출처다.
+</div>
+
+<h2>1. 2026의 합의: Agent = Model + Harness</h2>
+<p>2026년 업계는 "에이전트의 어려운 부분은 모델이 아니라 그 모델을 둘러싼 <strong>하네스</strong>"라는 합의에 도달했다. 하네스란 에이전트가 모든 세션에 걸쳐 작동하는 환경 전체에 대한 거버넌스 — 접근 가능한 툴, 충족 기준(검증), 실시간 오류 교정 피드백 루프 — 즉 일종의 <strong>AI control plane</strong>이다.</p>
+
+<div class="formula">
+  Agent <span class="plus">=</span> Model <span class="plus">+</span> <span class="harness">Harness</span>
+</div>
+
+<div class="callout">
+  <span class="q">“2025 was the year AI agents proved they could write code, 2026 is the year we learned that the agent isn't the hard part — the harness is.”</span><br>
+  — Faros AI / Mitchell Hashimoto 인용
+</div>
+
+<p>성숙 단계도 <strong>prompt engineering → context engineering → harness engineering</strong>의 4번째 패러다임으로 진화했다. 핵심 원칙은 <strong>“실수를 구조적으로 불가능하게 만들기”</strong> — 에이전트가 실수할 때마다 환경(하네스)에 영구 수정을 새겨 재발을 차단한다. 이는 본 프로젝트 글로벌 규칙의 <em>“같은 실패가 반복되면 증상이 아니라 하네스를 고친다”</em>와 정확히 같은 철학이다.</p>
+
+<h2>2. 한눈에 보는 정합도 스코어카드</h2>
+<table>
+  <thead>
+    <tr><th style="width:26%">하네스 차원</th><th style="width:18%">정합도</th><th>요지</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>거버넌스 / Control plane</td><td class="score s-high">◉ 높음</td><td>ai-pm MCP 티켓 렛저 = 상태·승인 SSOT. control plane 개념과 직접 대응</td></tr>
+    <tr><td>결정론적 가드레일</td><td class="score s-high">◉ 매우 높음</td><td>PreToolUse 하드 게이트 4종(exit 2 차단)이 2026 "지시문→hook" 모범 사례와 정확히 일치</td></tr>
+    <tr><td>검증 루프 / 독립성</td><td class="score s-high">◉ 높음</td><td>작성자≠리뷰어, self-approval 금지, STRICT submit_test. <b>갭: 서버 독립 재실행 아님</b></td></tr>
+    <tr><td>서브에이전트 오케스트레이션</td><td class="score s-high">◉ 높음</td><td>planner/executor/critic + 병렬 fan-out + cross-region 핸드오프</td></tr>
+    <tr><td>장시간 작업 / GAN 3-에이전트</td><td class="score s-high">◉ 높음</td><td>planner/generator/evaluator ≈ planner/executor/critic, docs/ artifact 핸드오프</td></tr>
+    <tr><td>컨텍스트 엔지니어링</td><td class="score s-mid">◐ 중간</td><td>fresh subagent 격리는 충족. <b>갭: 규칙 사전적재 과다, JIT retrieval·compaction 미흡</b></td></tr>
+    <tr><td>툴 설계 / MCP 효율</td><td class="score s-mid">◐ 중간</td><td>다수 MCP 도구 직접 노출. <b>갭: progressive disclosure / code-execution 미적용</b></td></tr>
+  </tbody>
+</table>
+<p class="legend">◉ 높음 = 최신 모범 사례와 직접 대응 · ◐ 중간 = 부분 충족, 2026 신규 트렌드에서 개선 여지</p>
+
+<h2>3. 차원별 상세 대조</h2>
+
+<!-- DIM 1 -->
+<div class="dim-block">
+  <div class="dim-head">
+    <span class="title">① 거버넌스 / Control plane</span>
+    <span class="score s-high">◉ 높음</span>
+  </div>
+  <div class="twocol">
+    <div class="col left">
+      <div class="label">최신 모범 사례</div>
+      <ul class="tight">
+        <li>하네스 = 툴·충족 기준·교정 피드백 루프에 대한 <b>거버넌스</b> (AI control plane)</li>
+        <li>OpenAI Lopopolo: 5개월 수동 0줄로 100만 라인·1,500 PR — 거버넌스가 규모를 만든다</li>
+        <li>상태/라이프사이클을 단일 권위가 관장</li>
+      </ul>
+    </div>
+    <div class="col right">
+      <div class="label">ai-pm-system 구현</div>
+      <ul class="tight">
+        <li><code>ai-pm</code> MCP 티켓 렛저가 상태·승인 <b>SSOT</b></li>
+        <li><code>create_task → start_work → submit_test → approve_review → done</code> 결정론 상태기계</li>
+        <li>서버측 전이 차단(<code>testing→review</code> 직접 전환 거부)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="gap ok"><b>정합:</b> 티켓 렛저가 control plane 역할을 그대로 수행. 10단계 워크플로우 + 자동 done 전환이 라이프사이클 거버넌스와 직접 대응한다.</div>
+</div>
+
+<!-- DIM 2 -->
+<div class="dim-block">
+  <div class="dim-head">
+    <span class="title">② 결정론적 가드레일 / 휴먼 게이트</span>
+    <span class="score s-high">◉ 매우 높음</span>
+  </div>
+  <div class="twocol">
+    <div class="col left">
+      <div class="label">최신 모범 사례</div>
+      <ul class="tight">
+        <li><span class="q">“'Never do this' in CLAUDE.md is the wrong approach. A real guardrail needs to be deterministic.”</span></li>
+        <li>PreToolUse hook이 가장 강력 — 에이전트 루프 <b>밖</b>에서 실행, exit code 2로 차단</li>
+        <li>권한은 <b>deny 우선</b> 평가, 조직 정책으로 bypass 금지</li>
+      </ul>
+    </div>
+    <div class="col right">
+      <div class="label">ai-pm-system 구현</div>
+      <ul class="tight">
+        <li><code>epic-id-guard</code> — epic_id null 티켓 차단</li>
+        <li><code>discovery-guard</code> — Discovery 산출물 없으면 플랜 차단</li>
+        <li><code>plan-review-guard</code> — 산출물 3종 없으면 start_work 차단</li>
+        <li><code>codex-review-guard</code> — 리뷰 산출물·중요변경 codex 흔적 검증</li>
+      </ul>
+    </div>
+  </div>
+  <div class="gap ok"><b>정합(모범 케이스):</b> 2026이 권고하는 "지시문 → 결정론적 hook" 전환을 이미 4개 PreToolUse 가드(exit 2)로 구현. fast-track 마커 우회까지 결정론적으로 처리. <b>업계 모범 사례의 교과서적 구현</b>.</div>
+  <div class="gap"><b>부분 갭:</b> <code>agent-mapping.md</code>의 CROSS-REGION 핸드오프 블록은 스스로 인정하듯 "PreToolUse hook이 에이전트 final message를 파싱하지 않아 강제되지 않는 <b>절차적 검증</b>"이다. 최신 원칙대로라면 이 협력 계약도 결정론적 게이트로 끌어올릴 여지가 있다.</div>
+</div>
+
+<!-- DIM 3 -->
+<div class="dim-block">
+  <div class="dim-head">
+    <span class="title">③ 검증 루프 / 검증자 독립성</span>
+    <span class="score s-high">◉ 높음 · 갭 존재</span>
+  </div>
+  <div class="twocol">
+    <div class="col left">
+      <div class="label">최신 모범 사례</div>
+      <ul class="tight">
+        <li>표준 사이클 <b>Plan → Search → Modify → Verify → Repair</b></li>
+        <li><span class="q">“The verifier is independent of the agent. The agent never gets to self-report success — the loop re-runs the actual test suite.”</span></li>
+        <li>Verify에 타입체크·테스트·빌드·린터를 <b>실제 실행</b>으로 배선</li>
+      </ul>
+    </div>
+    <div class="col right">
+      <div class="label">ai-pm-system 구현</div>
+      <ul class="tight">
+        <li><b>Iron Law</b>: 실행 증거 없는 완료 주장 금지</li>
+        <li><b>STRICT submit_test</b>: build+lint+unit 전부 <code>pass</code> 강제(누락/skip 거부)</li>
+        <li>self-healing 루프(MAJOR 이하 자동 수정)</li>
+        <li>작성자 ≠ 리뷰어, <b>self-approval 금지</b></li>
+      </ul>
+    </div>
+  </div>
+  <div class="gap ok"><b>정합:</b> "검증자 독립성"을 self-approval 금지 + 별도 critic/code-reviewer 패스로 구조적으로 구현. self-healing 루프는 "Verify → Repair" 사이클과 직접 대응.</div>
+  <div class="gap"><b>갭:</b> <code>submit_test</code>는 에이전트가 <b>제출한 출력</b>(≥10자)을 신뢰한다 — 서버가 테스트를 <b>독립적으로 재실행</b>하지는 않는다. 최신 모범 사례의 핵심("loop re-runs the actual test suite")을 100% 충족하려면, CI가 동일 커밋에서 빌드/테스트를 재실행한 결과를 렛저에 역연동하는 단계가 필요하다.</div>
+</div>
+
+<!-- DIM 4 -->
+<div class="dim-block">
+  <div class="dim-head">
+    <span class="title">④ 서브에이전트 오케스트레이션</span>
+    <span class="score s-high">◉ 높음</span>
+  </div>
+  <div class="twocol">
+    <div class="col left">
+      <div class="label">최신 모범 사례</div>
+      <ul class="tight">
+        <li>5대 패턴: sequential / <b>parallel(fan-out·fan-in)</b> / hierarchical / handoff / loop</li>
+        <li>작성자 vs 리뷰어 역할 분리(탐지→수정)</li>
+        <li>각 서브에이전트는 <b>fresh isolated context</b> → 메인 오염 차단</li>
+      </ul>
+    </div>
+    <div class="col right">
+      <div class="label">ai-pm-system 구현</div>
+      <ul class="tight">
+        <li>모델 라우팅: <code>executor-low/sonnet/high</code>, <code>designer</code>, <code>critic</code></li>
+        <li>단일 메시지 <b>병렬 dispatch</b>(리뷰 다중 라운드 60% 단축)</li>
+        <li>파일 소유권 파티셔닝(동일 파일 동시수정 금지)</li>
+        <li><code>shared_memory</code> <code>coord:</code> 키 핸드오프 + 핑퐁 상한 3라운드</li>
+      </ul>
+    </div>
+  </div>
+  <div class="gap ok"><b>정합:</b> fan-out/fan-in·handoff·loop 패턴을 모두 보유. Superpowers <code>dispatching-parallel-agents</code> + <code>subagent-driven-development</code>로 fresh subagent 격리를 명문화.</div>
+</div>
+
+<!-- DIM 5 -->
+<div class="dim-block">
+  <div class="dim-head">
+    <span class="title">⑤ 장시간 작업 / GAN식 3-에이전트</span>
+    <span class="score s-high">◉ 높음</span>
+  </div>
+  <div class="twocol">
+    <div class="col left">
+      <div class="label">최신 모범 사례 (Anthropic 2026.04)</div>
+      <ul class="tight">
+        <li><b>Planner</b>(스펙) → <b>Generator</b>(스프린트 구현) → <b>Evaluator</b>(라이브 비평)</li>
+        <li>self-evaluation leniency를 <b>생성/채점 분리 + 적대적 프롬프트</b>로 보정</li>
+        <li>라운드 사이 <b>fresh 인스턴스(context reset) + 파일 핸드오프</b></li>
+      </ul>
+    </div>
+    <div class="col right">
+      <div class="label">ai-pm-system 구현</div>
+      <ul class="tight">
+        <li><code>planner</code> → <code>executor</code> → <code>critic</code>/<code>code-reviewer</code> 3분할</li>
+        <li>적대적 검증: <b>Codex challenge</b> + critic adversarial(3중 검증)</li>
+        <li><code>docs/00~06</code> 단계별 artifact 핸드오프, <code>ultragoal</code> 세션 연속성</li>
+      </ul>
+    </div>
+  </div>
+  <div class="gap ok"><b>정합(강함):</b> Anthropic의 GAN 영감 3-에이전트가 본 프로젝트의 planner/executor/critic + Codex 적대적 challenge와 거의 1:1 대응. "self-evaluation leniency 보정"을 self-approval 금지로 선제 구현했다.</div>
+  <div class="gap"><b>경미 갭:</b> 라운드 간 "context reset"이 규칙상 권장(fresh subagent)일 뿐, Agent SDK <b>compaction</b>처럼 자동화된 메커니즘은 아니다. 대형 다세션 작업에서 ultragoal 외 자동 압축 경로는 미흡.</div>
+</div>
+
+<!-- DIM 6 -->
+<div class="dim-block">
+  <div class="dim-head">
+    <span class="title">⑥ 컨텍스트 엔지니어링</span>
+    <span class="score s-mid">◐ 중간</span>
+  </div>
+  <div class="twocol">
+    <div class="col left">
+      <div class="label">최신 모범 사례</div>
+      <ul class="tight">
+        <li><b>context rot</b>: 토큰↑ → 정확 회상↓. 유한 자원으로 관리</li>
+        <li><b>compaction</b>(요약 후 재시작) + <b>structured memory</b> + <b>sub-agent</b></li>
+        <li><b>just-in-time retrieval</b>: 사전 적재 대신 glob/grep로 필요 시점 회수</li>
+      </ul>
+    </div>
+    <div class="col right">
+      <div class="label">ai-pm-system 구현</div>
+      <ul class="tight">
+        <li>sub-agent 격리 ✔ · <code>memory/</code> structured memory ✔ · <code>notepad</code>/<code>wiki</code> ✔</li>
+        <li>그러나 <b>CLAUDE.md + rules 11종 + 글로벌 규칙</b>을 매 세션 사전 적재</li>
+        <li>규칙이 상호 참조(<code>[[link]]</code>)로 비대 — 토큰 비용 큼</li>
+      </ul>
+    </div>
+  </div>
+  <div class="gap"><b>갭(개선 1순위):</b> 본 프로젝트는 방대한 규칙 문서를 <b>전부 컨텍스트 선적재</b>한다. 2026 모범 사례(just-in-time retrieval, progressive disclosure)와 반대 방향. <b>제안:</b> 규칙을 "핵심 요약 + 필요 시 해당 rules 파일만 회수"로 재구성하면 context rot을 줄이고 토큰을 절감할 수 있다. structured memory(<code>memory/</code>)·wiki는 이미 올바른 방향.</div>
+</div>
+
+<!-- DIM 7 -->
+<div class="dim-block">
+  <div class="dim-head">
+    <span class="title">⑦ 툴 설계 / MCP 효율</span>
+    <span class="score s-mid">◐ 중간</span>
+  </div>
+  <div class="twocol">
+    <div class="col left">
+      <div class="label">최신 모범 사례 (Anthropic)</div>
+      <ul class="tight">
+        <li>5원칙 + <b>Prototype → Evaluate → Collaborate</b> 반복</li>
+        <li><b>Namespacing</b>(<code>asana_search</code> 식 prefix)으로 선택 정확도↑</li>
+        <li>응답에 pagination·filtering·truncation으로 토큰 절약</li>
+        <li><b>Code execution + progressive disclosure</b> → 97~98% 토큰 절감</li>
+      </ul>
+    </div>
+    <div class="col right">
+      <div class="label">ai-pm-system 구현</div>
+      <ul class="tight">
+        <li><code>ai-pm</code> MCP가 다수 도구를 <b>직접 노출</b>(create_task·smart_workflow·analyze… 60+)</li>
+        <li>도구 namespacing은 <code>mcp__ai-pm__*</code> prefix로 충족 ✔</li>
+        <li>표준 보안 베이스(<code>_security-base.ts</code>)로 입력 검증 ✔</li>
+      </ul>
+    </div>
+  </div>
+  <div class="gap"><b>갭:</b> 모든 MCP 도구가 시스템 프롬프트에 풀스키마로 상주 → 토큰 부담. 2026 트렌드인 <b>progressive disclosure</b>(이름+짧은 설명만 노출, 호출 시 스키마 로드)나 <b>code execution with MCP</b>는 미적용. 이 세션 자체가 deferred tool + ToolSearch로 progressive disclosure를 쓰고 있다는 점이 역설적 — 같은 패턴을 ai-pm 도구군에도 적용할 여지가 크다.</div>
+</div>
+
+<h2>4. 종합 판정</h2>
+<div class="verdict">
+  <h3 style="margin-top:0">📌 결론: 강한 정합 + 3개 영역에서 2026 신규 트렌드 따라잡기 여지</h3>
+  <p><code>ai-pm-system</code>의 하네스는 2026 "harness engineering" 모범 사례와 <strong>구조적으로 높은 정합</strong>을 보인다. 특히 <strong>결정론적 가드레일(PreToolUse hook)</strong>, <strong>검증자 독립성(self-approval 금지)</strong>, <strong>GAN식 planner/generator/evaluator 분리</strong>는 업계가 2026.02~04에야 명문화한 패턴을 이미 운영 중이다. "실수를 하네스에 영구 박제" 철학도 글로벌 규칙에 내장되어 있다.</p>
+  <p style="margin-bottom:0">반면 <strong>2026에 새로 부상한 효율·컨텍스트 트렌드</strong>에서는 따라잡을 여지가 있다:</p>
+  <ol>
+    <li><strong>컨텍스트 선적재 → just-in-time retrieval</strong>: 규칙 11종 전량 적재를 "요약 + 필요 시 회수"로 전환 (context rot·토큰 절감)</li>
+    <li><strong>MCP progressive disclosure / code-execution</strong>: ai-pm 도구군을 지연 로딩 패턴으로 (97~98% 토큰 절감 사례)</li>
+    <li><strong>서버측 독립 검증</strong>: <code>submit_test</code> 신뢰 모델을 CI 재실행 역연동으로 보강해 "verifier re-runs actual suite" 원칙 완성</li>
+  </ol>
+</div>
+
+<h2>5. 출처</h2>
+<ul class="source-list">
+  <li>Anthropic — <a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents">Effective harnesses for long-running agents</a> (2025.11)</li>
+  <li>Anthropic — <a href="https://www.anthropic.com/engineering/harness-design-long-running-apps">Harness design for long-running application development</a> (2026.04)</li>
+  <li>Anthropic — <a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents">Effective context engineering for AI agents</a> (2025.09)</li>
+  <li>Anthropic — <a href="https://www.anthropic.com/engineering/writing-tools-for-agents">Writing effective tools for AI agents</a></li>
+  <li>Anthropic — <a href="https://www.anthropic.com/engineering/code-execution-with-mcp">Code execution with MCP</a></li>
+  <li>Anthropic — <a href="https://www.anthropic.com/engineering/managed-agents">Scaling Managed Agents: Decoupling brain from hands</a> (2026.04)</li>
+  <li>Anthropic — <a href="https://www.anthropic.com/research/building-effective-agents">Building Effective AI Agents</a></li>
+  <li>OpenAI / Ryan Lopopolo — <a href="https://openai.com/index/harness-engineering/">Harness engineering: leveraging Codex</a> (2026.02)</li>
+  <li>Claude 공식 블로그 — <a href="https://claude.com/blog/steering-claude-code-skills-hooks-rules-subagents-and-more">Steering Claude Code (skills/hooks/rules/subagents)</a></li>
+  <li>Claude Code Docs — <a href="https://code.claude.com/docs/en/hooks-guide">Automate actions with hooks</a></li>
+  <li>Faros AI — <a href="https://www.faros.ai/blog/harness-engineering">Harness Engineering: Making AI Coding Agents Work in 2026</a></li>
+  <li>GitHub — <a href="https://github.com/ai-boost/awesome-harness-engineering">awesome-harness-engineering</a> · <a href="https://github.com/anthropics/cwc-long-running-agents">anthropics/cwc-long-running-agents</a></li>
+</ul>
+
+<footer>
+  생성: Claude Code (Opus 4.8) · 최신 동향은 WebSearch 크롤링(WebFetch 미허용 환경) 기반 · ai-pm-system 하네스는 <code>CLAUDE.md</code> · <code>.claude/rules/*</code> · <code>.claude/hooks/*</code> 실측 · 본 문서는 분석 산출물로 코드 변경을 포함하지 않음
+</footer>
+
+</div>
+</body>
+</html>

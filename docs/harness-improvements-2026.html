@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ai-pm-system 하네스 개선 방안 — 컨텍스트 JIT · MCP Progressive Disclosure · 서버측 독립 검증</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel2: #1c2330;
+    --border: #2a3140;
+    --text: #e6edf3;
+    --muted: #9aa7b4;
+    --accent: #4493f8;
+    --green: #3fb950;
+    --amber: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", Roboto, sans-serif;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 40px 24px 80px; }
+  header.hero {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    background: linear-gradient(135deg, #161b22 0%, #1c2330 100%);
+    margin-bottom: 28px;
+  }
+  .eyebrow { text-transform: uppercase; letter-spacing: 2px; font-size: 12px; color: var(--accent); font-weight: 700; margin: 0 0 10px; }
+  h1 { font-size: 28px; line-height: 1.28; margin: 0 0 12px; }
+  h2 { font-size: 22px; margin: 44px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 16px; margin: 22px 0 8px; color: var(--text); }
+  .sub { color: var(--muted); font-size: 14px; margin: 0; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .chip { font-size: 12px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: #0d1117; color: var(--muted); }
+  .chip strong { color: var(--text); }
+  p { color: var(--text); }
+  code {
+    background: #0d1117; border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px;
+    font-size: 12.5px; color: var(--purple); font-family: "SF Mono", ui-monospace, "Cascadia Code", Menlo, monospace;
+  }
+  pre {
+    background: #0a0e14; border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px;
+    overflow-x: auto; font-size: 12.5px; line-height: 1.55;
+    font-family: "SF Mono", ui-monospace, "Cascadia Code", Menlo, monospace; color: #c9d1d9;
+  }
+  pre .c { color: #6a737d; }
+  pre .k { color: #ff7b72; }
+  pre .s { color: #a5d6ff; }
+  pre .f { color: #d2a8ff; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; background: var(--panel2); }
+  tr:last-child td { border-bottom: none; }
+  .roadmap td:first-child { font-weight: 700; }
+  .pri { font-weight: 700; white-space: nowrap; }
+  .p1 { color: var(--red); }
+  .p2 { color: var(--amber); }
+  .p3 { color: var(--accent); }
+  .sec {
+    border: 1px solid var(--border); border-radius: 14px; margin: 22px 0;
+    overflow: hidden; background: var(--panel);
+  }
+  .sec-head {
+    display: flex; align-items: center; gap: 14px; padding: 18px 22px;
+    background: linear-gradient(90deg, var(--panel2), var(--panel));
+    border-bottom: 1px solid var(--border);
+  }
+  .sec-num {
+    flex: none; width: 38px; height: 38px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 18px; color: #0d1117; background: var(--accent);
+  }
+  .sec-head .t { font-size: 18px; font-weight: 700; }
+  .sec-head .badges { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge { font-size: 11px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border); color: var(--muted); }
+  .badge.eff-low { color: var(--green); border-color: rgba(63,185,80,.4); }
+  .badge.eff-mid { color: var(--amber); border-color: rgba(210,153,34,.4); }
+  .badge.eff-high { color: var(--red); border-color: rgba(248,81,73,.4); }
+  .sec-body { padding: 8px 22px 22px; }
+  .blockrow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 14px 0; }
+  @media (max-width: 760px) { .blockrow { grid-template-columns: 1fr; } .wrap { padding: 24px 16px 60px; } .sec-head .badges { width: 100%; margin-left: 0; } }
+  .mini {
+    border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: #0d1117;
+  }
+  .mini .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 7px; }
+  .mini.cur .label { color: var(--amber); }
+  .mini.goal .label { color: var(--green); }
+  ul.tight { margin: 6px 0; padding-left: 18px; }
+  ul.tight li { margin: 4px 0; }
+  ol.steps { margin: 8px 0; padding-left: 20px; }
+  ol.steps li { margin: 7px 0; }
+  .impact {
+    margin-top: 14px; padding: 13px 16px; border-radius: 9px;
+    background: rgba(63,185,80,.07); border: 1px solid rgba(63,185,80,.3); font-size: 13.5px;
+  }
+  .impact b { color: var(--green); }
+  .risk {
+    margin-top: 10px; padding: 13px 16px; border-radius: 9px;
+    background: rgba(210,153,34,.07); border: 1px solid rgba(210,153,34,.3); font-size: 13.5px;
+  }
+  .risk b { color: var(--amber); }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel2); border-radius: 0 10px 10px 0; padding: 14px 18px; margin: 16px 0; font-size: 14px; }
+  footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12.5px; }
+  .note { font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">Harness Improvement Proposal</p>
+  <h1><code>ai-pm-system</code> 하네스 개선 방안 — 2026 효율 트렌드 따라잡기</h1>
+  <p class="sub">직전 비교 분석(<code>harness-comparison-2026.html</code>)에서 도출된 4개 갭에 대한 구체적 실행 계획. 각 항목을 문제 → 현재 → 개선안 → 구현 단계 → 노력/리스크 → 기대효과로 분해한다.</p>
+  <div class="meta-row">
+    <span class="chip">작성일 <strong>2026-06-21</strong></span>
+    <span class="chip">대상 <strong>ai-pm-system (APS)</strong></span>
+    <span class="chip">유형 <strong>개선 제안서 (코드 변경 미포함)</strong></span>
+    <span class="chip">선행 문서 <strong>harness-comparison-2026.html</strong></span>
+  </div>
+</header>
+
+<div class="callout">
+  본 문서는 <strong>제안서</strong>다. 실제 구현은 각 항목별로 <code>ai-pm</code> 티켓을 발행하고 워크플로우(Discovery→Plan→Review→구현→검증)를 거쳐야 한다. 특히 ②③은 서버/MCP 코어 변경이라 <strong>아키텍처 변경(3중 검증)</strong> 분류에 해당한다.
+</div>
+
+<h2>구현 현황 (2026-06-23 업데이트)</h2>
+<div class="verdict">
+  <p style="margin-top:0">본 제안서의 4개 개선안은 <code>ai-pm</code> 티켓-우선 워크플로우로 착수되었다. 실제 진행 결과:</p>
+  <table>
+    <thead>
+      <tr><th>개선</th><th>티켓</th><th>상태</th><th>결과</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>① 컨텍스트 JIT</td><td>APS-2-8</td><td class="score s-high">✅ done</td><td>rules 6종 <code>paths:</code> frontmatter → 항상로딩 <b>701→234줄 (67%↓)</b>. 1중 리뷰 통과</td></tr>
+      <tr><td>④ 자동 compaction</td><td>APS-2-9</td><td class="score s-high">✅ done</td><td>round-handoff 템플릿 + agent-mapping 통합. T2/T3 복원검증 + 2중 리뷰 통과</td></tr>
+      <tr><td>② MCP 슬림화</td><td>APS-1-14</td><td class="score s-mid">⏸ 보류</td><td>progressive disclosure는 Claude Code 미지원, description은 이미 terse(120자+ 0개) → 실익 무의미. 외부 의존성 대기</td></tr>
+      <tr><td>③ 서버측 독립 검증</td><td>APS-5-13</td><td class="score s-mid">🔄 진행</td><td>CI 게이트 구현 + 209테스트. 3중 리뷰(보안 MAJOR 1) → self-healing 중. <b>default-OFF 출하</b>(enable은 사용자 몫)</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-bottom:0" class="note">핵심 교훈: ②의 헤드라인(97~98% 절감)은 Claude Code의 동적 도구 로딩 미지원으로 무효화 — 모범 사례라도 런타임 제약 선검증이 필수임을 확인. ③는 플랜 우선(plan-first)이 CRITICAL/MAJOR를 구현 전에 잡아낸 사례.</p>
+</div>
+
+<h2>실행 로드맵 요약</h2>
+<table class="roadmap">
+  <thead>
+    <tr><th style="width:4%">#</th><th style="width:26%">개선 항목</th><th style="width:12%">우선순위</th><th style="width:12%">노력</th><th>한 줄 효과</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>①</td><td>컨텍스트 선적재 → JIT 회수</td><td class="pri p1">P1 (최우선)</td><td>중</td><td>매 세션 규칙 토큰 대폭 절감, context rot 완화 — 코드 코어 무관, 가장 안전</td></tr>
+    <tr><td>②</td><td>MCP Progressive Disclosure / Code-Execution</td><td class="pri p2">P2</td><td>중~높음</td><td>ai-pm 도구 60+ 스키마 상주 제거, 도구 선택 정확도↑</td></tr>
+    <tr><td>③</td><td>서버측 독립 검증 (CI 역연동)</td><td class="pri p3">P3</td><td>높음</td><td>submit_test 신뢰 모델 → "검증자가 실제 재실행" 원칙 완성</td></tr>
+    <tr><td>④</td><td>라운드 간 자동 compaction (장시간 작업)</td><td class="pri p3">P3</td><td>중</td><td>fresh subagent 절차적 권장 → 자동 요약·핸드오프로 다세션 연속성 강화</td></tr>
+  </tbody>
+</table>
+<p class="note">권장 순서: ① 먼저(저위험·고효과) → ④(중위험·다세션 작업 시) → ② → ③(가장 큰 변경). 각각 독립이므로 병렬 진행도 가능하나, ①은 즉시 착수 권장.</p>
+
+<!-- ================= SECTION 1 ================= -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">①</div>
+    <div class="t">컨텍스트 선적재 → Just-in-Time 회수</div>
+    <div class="badges">
+      <span class="badge">P1</span>
+      <span class="badge eff-low">노력: 중</span>
+      <span class="badge eff-low">리스크: 낮음</span>
+    </div>
+  </div>
+  <div class="sec-body">
+    <h3>문제</h3>
+    <p>2026 모범 사례(<em>just-in-time retrieval, context rot 관리</em>)는 "필요할 때 필요한 것만 회수"를 권한다. 반면 본 프로젝트는 매 세션 <strong>글로벌 <code>CLAUDE.md</code> + 프로젝트 <code>CLAUDE.md</code> + <code>.claude/rules/*</code> 11종</strong>을 통째로 컨텍스트에 선적재한다. 토큰이 늘수록 회상 정확도가 떨어지는 context rot을 스스로 유발한다.</p>
+
+    <div class="blockrow">
+      <div class="mini cur">
+        <div class="label">현재 상태</div>
+        <ul class="tight">
+          <li>규칙 11종(continuous-execution, discovery-and-plan, code-review, fast-track …)이 전량 주입</li>
+          <li>상호 <code>[[link]]</code> 참조로 비대, 대부분의 세션은 그중 1~2개만 실제 사용</li>
+          <li>fast-track 단순 변경에도 정식 워크플로우 규칙 전체가 적재됨</li>
+        </ul>
+      </div>
+      <div class="mini goal">
+        <div class="label">목표 상태</div>
+        <ul class="tight">
+          <li><code>CLAUDE.md</code> = 얇은 <b>라우터</b>(한 줄 요약 + 트리거 키워드 + 하드게이트 핵심만)</li>
+          <li>상세 규칙은 <b>트리거 시점에만</b> 해당 파일 회수</li>
+          <li>하드 게이트(hook)는 그대로 — 가드는 컨텍스트와 무관하게 항상 강제</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>개선안 — "Rule Router + on-demand load"</h3>
+    <p>핵심 통찰: <strong>강제(hook)와 안내(rules 본문)를 분리</strong>한다. 차단은 이미 PreToolUse hook이 결정론적으로 하므로, rules 본문을 컨텍스트에 상주시킬 필요가 없다. CLAUDE.md는 "언제 어떤 규칙을 읽어야 하는지"의 색인만 남긴다.</p>
+    <pre><span class="c"># CLAUDE.md (목표: 라우터화)</span>
+<span class="c">## 규칙 색인 (필요 시 해당 파일을 Read로 회수)</span>
+| 트리거 | 규칙 파일 | 한 줄 |
+| 플랜 작성/Discovery | rules/discovery-and-plan.md | 3~5단계 절차 |
+| 코드 리뷰 강도 분류 | rules/code-review.md     | 1/2/3중 검증 |
+| 단순 변경            | rules/fast-track.md      | Discovery 생략 |
+<span class="c"># → 본문은 주입하지 않음. 매칭 시점에 Read.</span></pre>
+
+    <h3>구현 단계</h3>
+    <ol class="steps">
+      <li><b>토큰 베이스라인 측정</b>: 현재 CLAUDE.md+rules 적재 토큰을 <code>token-counting</code>으로 기록(개선 전후 비교 지표).</li>
+      <li><b>규칙 분류</b>: 각 rules 파일을 "항상 필요(하드게이트 요약)" vs "조건부(상세 절차)"로 태깅.</li>
+      <li><b>CLAUDE.md 라우터화</b>: 본문 인라인 제거, 색인 표 + 트리거만 유지. 하드게이트 요약 5~7줄은 인라인 유지.</li>
+      <li><b>회수 경로 명시</b>: "플랜 작성 직전 <code>rules/discovery-and-plan.md</code>를 Read" 식의 지시를 워크플로우 단계에 삽입(이미 단계별 참조 표기 존재 → 본문 의존만 제거).</li>
+      <li><b>회귀 점검</b>: hook 차단·워크플로우 동작이 규칙 본문 부재에도 유지되는지 검증(가드는 파일 존재만 보지 본문 적재와 무관).</li>
+    </ol>
+
+    <div class="impact"><b>기대 효과:</b> 매 세션 규칙 적재 토큰 대폭 절감(특히 fast-track·단순 질의 세션). context rot 완화로 장시간 작업 회상 정확도 개선. <b>코드 코어를 건드리지 않아 가장 안전</b> — 문서/정책 변경이라 fast-track 가능.</div>
+    <div class="risk"><b>리스크/완화:</b> 규칙을 "안 읽고 지나칠" 위험 → 하드게이트(hook)는 그대로라 정책 위반은 여전히 차단됨. 안내 누락 위험은 워크플로우 단계의 명시적 "지금 X 규칙 Read" 지시로 보완.</div>
+  </div>
+</div>
+
+<!-- ================= SECTION 2 ================= -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">②</div>
+    <div class="t">MCP Progressive Disclosure / Code-Execution</div>
+    <div class="badges">
+      <span class="badge">P2</span>
+      <span class="badge eff-mid">노력: 중~높음</span>
+      <span class="badge eff-mid">리스크: 중</span>
+    </div>
+  </div>
+  <div class="sec-body">
+    <h3>문제</h3>
+    <p>Anthropic <em>Code execution with MCP</em>는 도구를 풀스키마로 시스템 프롬프트에 상주시키는 대신, <strong>이름+짧은 설명만 노출하고 호출 시점에 스키마를 로드</strong>(progressive disclosure)하여 측정상 97~98% 토큰 절감을 보고했다. 본 프로젝트의 <code>ai-pm</code> MCP는 60개 이상 도구를 직접 노출한다.</p>
+
+    <div class="blockrow">
+      <div class="mini cur">
+        <div class="label">현재 상태</div>
+        <ul class="tight">
+          <li><code>create_task</code>·<code>smart_workflow</code>·<code>analyze_*</code>·<code>research_*</code> 등 60+ 도구 풀스키마 상주</li>
+          <li>대부분 세션은 5~10개만 사용(create_task / smart_workflow / get_project_status 중심)</li>
+          <li>namespacing(<code>mcp__ai-pm__*</code>)은 이미 충족 ✔</li>
+        </ul>
+      </div>
+      <div class="mini goal">
+        <div class="label">목표 상태</div>
+        <ul class="tight">
+          <li>핵심 도구 소수만 상시 노출 + 나머지는 <b>지연 로딩</b></li>
+          <li>또는 도구를 <b>코드 API</b>로 노출해 호출 시점에만 스키마 적재</li>
+          <li>이 Claude Code 세션의 <code>ToolSearch</code> 패턴과 동일 철학</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>개선안 — 2개 경로 (택1 또는 병행)</h3>
+    <h3 style="color:var(--accent)">경로 A · Progressive Disclosure (점진 공개)</h3>
+    <p>핵심 도구(create_task, smart_workflow, get_project_status 등 ~8개)만 상시 노출하고, 저빈도 도구는 메타 도구 뒤로 숨긴다.</p>
+    <pre><span class="c">// 상시 노출: 핵심 8종 + 디스커버리 도구 1종</span>
+<span class="f">ai_pm_list_capabilities</span>()        <span class="c">// 이름+1줄 설명만 반환</span>
+<span class="f">ai_pm_load_tool</span>(<span class="s">"decompose_task"</span>)  <span class="c">// 호출 시 해당 스키마 로드</span>
+<span class="c">// → 60종 풀스키마 상주 제거, 필요 시점에만 적재</span></pre>
+
+    <h3 style="color:var(--accent)">경로 B · Code Execution with MCP</h3>
+    <p>도구를 호출 가능한 코드 API로 노출하고, 에이전트가 코드로 조합 호출. progressive disclosure(이름+60자 설명만 시스템 프롬프트)와 결합 시 최대 효과.</p>
+
+    <h3>구현 단계</h3>
+    <ol class="steps">
+      <li><b>사용 빈도 계측</b>: 활동 로그(<code>get_project_activities</code>)·텔레메트리로 도구별 호출 빈도 집계 → 핵심/저빈도 분류.</li>
+      <li><b>핵심 세트 확정</b>: 워크플로우 필수 경로(create_task→smart_workflow→approve_review) 도구를 상시 노출로.</li>
+      <li><b>메타 도구 구현</b>: <code>packages/mcp-server</code>에 <code>list_capabilities</code> + <code>load_tool</code>(또는 code-execution 래퍼) 추가.</li>
+      <li><b>클라이언트 호환 확인</b>: Claude Code의 deferred-tool/ToolSearch와의 상호작용 검증(이중 지연 로딩 충돌 방지).</li>
+      <li><b>토큰 절감 측정</b>: 시스템 프롬프트 도구 섹션 토큰 before/after 비교.</li>
+    </ol>
+
+    <div class="impact"><b>기대 효과:</b> 도구 섹션 토큰 대폭 절감 + 도구 선택 정확도 향상(노출 표면 축소). namespacing은 이미 충족이라 출발점 양호.</div>
+    <div class="risk"><b>리스크/완화:</b> MCP 코어 변경 → <b>아키텍처 변경(3중 검증)</b> 분류. 지연 로딩이 잘못되면 도구 호출 실패 → 핵심 세트는 항상 상시 노출로 안전망 확보. 단계적 롤아웃(저빈도 5종부터) 권장.</div>
+  </div>
+</div>
+
+<!-- ================= SECTION 3 ================= -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">③</div>
+    <div class="t">서버측 독립 검증 (CI 재실행 역연동)</div>
+    <div class="badges">
+      <span class="badge">P3</span>
+      <span class="badge eff-high">노력: 높음</span>
+      <span class="badge eff-high">리스크: 중~높음</span>
+    </div>
+  </div>
+  <div class="sec-body">
+    <h3>문제</h3>
+    <p>2026 검증 원칙의 핵심은 <em>"The verifier is independent of the agent — the loop re-runs the actual test suite."</em> 현재 <code>submit_test</code>는 에이전트가 <strong>제출한 출력 문자열</strong>(STRICT 모드: build+lint+unit 전부 <code>pass</code>, ≥10자)을 신뢰한다. 서버가 동일 커밋에서 테스트를 <strong>독립 재실행</strong>하지는 않는다 — 이론상 위조 가능.</p>
+
+    <div class="blockrow">
+      <div class="mini cur">
+        <div class="label">현재 상태</div>
+        <ul class="tight">
+          <li><code>submit_test</code>가 에이전트 제출 출력을 신뢰(STRICT로 형식·pass 강제하나 재실행 아님)</li>
+          <li>Iron Law는 "실행 증거 동반"을 요구하나 <b>절차적</b> 신뢰</li>
+          <li>이미 보유: <code>link_pr_to_task</code>, <code>get_pr_status</code>, <code>sync_commit_progress</code></li>
+        </ul>
+      </div>
+      <div class="mini goal">
+        <div class="label">목표 상태</div>
+        <ul class="tight">
+          <li>CI(GitHub Actions)가 동일 커밋에서 build/test/lint <b>독립 재실행</b></li>
+          <li>CI 결과(green)를 렛저에 역연동 → <code>done</code> 전환의 게이트</li>
+          <li>에이전트 자기보고 ≠ 통과 판정의 단일 근거</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>개선안 — "CI를 독립 검증자로 승격"</h3>
+    <p>에이전트의 <code>submit_test</code>는 <b>1차 게이트</b>로 유지하되, 최종 <code>done</code> 전환을 <b>CI green</b>에 종속시킨다. 이미 있는 PR 연동 도구를 검증 루프로 승격.</p>
+    <pre><span class="c"># GitHub Actions (.github/workflows/verify.yml)</span>
+<span class="k">on</span>: [push, pull_request]
+<span class="k">jobs</span>:
+  verify:
+    steps:
+      - run: pnpm -r build
+      - run: pnpm --filter @ai-pm/mcp-server lint
+      - run: pnpm --filter @ai-pm/mcp-server test
+<span class="c"># → 통과 시 checks API가 green. 위조 불가(서버 외부 실행).</span></pre>
+    <pre><span class="c"># 렛저 게이트: approve_review/done 전 CI 확인</span>
+<span class="f">get_pr_status</span>(task_id) <span class="c">// GitHub checks 조회</span>
+<span class="c">// CI != green 이면 approve_review/done 거부 (신규 hook 또는 서버 가드)</span></pre>
+
+    <h3>구현 단계</h3>
+    <ol class="steps">
+      <li><b>CI 워크플로우 구축</b>: <code>.github/workflows/verify.yml</code>로 build+lint+test를 PR마다 재실행(이미 <code>docs/ci-test-isolation.md</code> 자산 존재 → 확장).</li>
+      <li><b>PR↔태스크 연동 강제</b>: <code>link_pr_to_task</code>를 워크플로우 8단계에 의무화.</li>
+      <li><b>CI 게이트 추가</b>: <code>get_pr_status</code>로 checks 조회 → green 아니면 <code>done</code> 전환 거부(서버측 또는 신규 PreToolUse hook).</li>
+      <li><b>submit_test 역할 재정의</b>: 에이전트 제출 = 1차(빠른 피드백), CI = 2차(권위) — 이중 검증 명문화.</li>
+      <li><b>회귀/우회 방지</b>: CI 미설정 레포는 기존 동작 유지(opt-in), APS는 enforce.</li>
+    </ol>
+
+    <div class="impact"><b>기대 효과:</b> "검증자 독립성" 원칙 100% 충족 — 위조 불가능한 외부 재실행이 최종 판정 근거. STRICT submit_test(에이전트 1차)와 CI(2차)의 이중 안전망. 직전 <code>API_KEY</code> enforce와 동일한 "opt-in 환경변수" 패턴으로 점진 도입 가능.</div>
+    <div class="risk"><b>리스크/완화:</b> CI/CD 인프라 변경 → 가장 큰 작업, <b>신규 인프라(3중 검증)</b> 분류. CI 지연이 워크플로우 속도에 영향 → submit_test 1차 게이트는 유지해 즉시 피드백 보존, CI는 <code>done</code> 직전에만 차단. Render 배포 파이프라인과의 정합 필요.</div>
+  </div>
+</div>
+
+<!-- ================= SECTION 4 ================= -->
+<div class="sec">
+  <div class="sec-head">
+    <div class="sec-num">④</div>
+    <div class="t">라운드 간 자동 Compaction (장시간·다세션 작업)</div>
+    <div class="badges">
+      <span class="badge">P3</span>
+      <span class="badge eff-mid">노력: 중</span>
+      <span class="badge eff-low">리스크: 낮~중</span>
+    </div>
+  </div>
+  <div class="sec-body">
+    <h3>문제</h3>
+    <p>Anthropic <em>Harness design for long-running apps</em>·<em>Effective context engineering</em>는 한계 임박 시 <strong>요약 후 새 윈도우 재시작(compaction)</strong>과 라운드 사이 <strong>fresh 인스턴스(context reset) + 파일 기반 핸드오프</strong>를 장시간 작업 표준 패턴으로 제시한다. 본 프로젝트는 fresh subagent를 <b>규칙상 권장</b>할 뿐, 컨텍스트 한계를 감지해 <b>자동으로 압축·재시작</b>하는 메커니즘은 없다. 대형 다세션 작업에서 <code>ultragoal</code> 외에 자동 압축 경로가 미흡하다.</p>
+
+    <div class="blockrow">
+      <div class="mini cur">
+        <div class="label">현재 상태</div>
+        <ul class="tight">
+          <li>fresh subagent 격리 ✔ (절차적 권장 — <code>subagent-driven-development</code>)</li>
+          <li><code>docs/00~06</code> 단계별 artifact 핸드오프 ✔</li>
+          <li><code>ultragoal</code> 세션 연속성 ✔ · <code>notepad</code>/<code>wiki</code> structured memory ✔</li>
+          <li>그러나 <b>한계 임박 감지 → 자동 요약 → 재시작</b> 경로 부재 (수동·암묵적)</li>
+        </ul>
+      </div>
+      <div class="mini goal">
+        <div class="label">목표 상태</div>
+        <ul class="tight">
+          <li>컨텍스트 임계 도달 시 <b>자동 compaction</b>(요약 → 새 윈도우)</li>
+          <li>라운드 종료 시 <b>handoff artifact 자동 생성</b> → 다음 세션이 전체 히스토리 대신 요약 복원</li>
+          <li><code>ultragoal</code>을 compaction 체크포인트와 통합</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>개선안 — "자동 compaction 체크포인트 + 파일 핸드오프"</h3>
+    <p>핵심: 장시간 작업을 <b>라운드 단위</b>로 끊고, 각 라운드 끝에 "다음 세션이 읽을 요약 artifact"를 자동으로 남긴 뒤 fresh 인스턴스로 재시작한다. 전체 대화 히스토리 누적 대신 <b>구조화된 요약만 승계</b>하여 context rot·실패 시도 오염을 차단한다.</p>
+    <pre><span class="c"># 라운드 종료 → compaction 체크포인트 자동 생성</span>
+<span class="c"># .omc/ultragoal/&lt;mission&gt;/round-N-handoff.md (또는 docs/)</span>
+## 라운드 N 요약
+- 완료: &lt;무엇을 끝냈나&gt;
+- 진행 중 상태: &lt;현재 위치&gt;
+- 다음 라운드 진입점: &lt;무엇부터&gt;
+- 결정/계약: &lt;타입·API·스키마 등 승계할 핵심만&gt;
+<span class="c"># → 다음 fresh 세션은 전체 히스토리 X, 이 요약만 주입받아 복원</span></pre>
+    <div class="callout">
+      이 항목은 ①(규칙 선적재)과 다르다. ①은 <b>세션 시작 시 정적 규칙</b>의 적재 방식이고, ④는 <b>장시간 작업 진행 중 동적 컨텍스트</b>의 압축·승계다. 둘 다 context rot을 줄이지만 작동 시점이 다르다.
+    </div>
+
+    <h3>구현 단계</h3>
+    <ol class="steps">
+      <li><b>compaction 트리거 기준 정의</b>: 토큰 임계값 또는 라운드 경계(예: 한 Phase 완료) — 어느 시점에 압축할지.</li>
+      <li><b>handoff 템플릿 표준화</b>: <code>.claude/templates/</code>에 round-handoff 템플릿 추가(완료/진행/진입점/승계 계약 4필드).</li>
+      <li><b>네이티브 compaction 활용</b>: Claude Code/Agent SDK가 제공하는 compaction을 장시간 워크플로우에 명시적으로 배선(요약 후 재시작).</li>
+      <li><b>ultragoal 통합</b>: 라운드 handoff를 <code>ultragoal</code> ledger의 진행 메모로 연결 — 단, 상태/승인 SSOT는 여전히 ai-pm MCP(이중관리 금지, <code>omc-skills-integration.md</code> 경계 준수).</li>
+      <li><b>재시작 주입 규칙</b>: fresh subagent dispatch 시 "전체 히스토리 대신 직전 round-handoff만 주입" 지시를 <code>agent-mapping.md</code>에 명문화.</li>
+      <li><b>측정</b>: 대형 작업의 세션당 토큰·완료율·재작업률 before/after.</li>
+    </ol>
+
+    <div class="impact"><b>기대 효과:</b> 다세션 대형 작업(DB 마이그레이션·대규모 리팩터링)에서 context rot·실패 시도 누적 오염 차단. fresh 인스턴스 + 파일 핸드오프가 Anthropic 장시간 작업 모범 패턴과 정합. 기존 <code>ultragoal</code>·<code>docs/</code> 자산을 재활용해 신규 인프라 부담 최소.</div>
+    <div class="risk"><b>리스크/완화:</b> 요약이 핵심 정보를 누락하면 다음 라운드가 맥락 손실 → handoff 템플릿의 "승계 계약" 필드를 필수화하고, 모호 시 직전 artifact를 추가 회수. <code>ultragoal</code>과 ai-pm 상태의 <b>이중관리 금지</b> 경계를 반드시 지킬 것(상태=ai-pm SSOT, ultragoal=진행 메모 한정).</div>
+  </div>
+</div>
+
+<h2>종합 — 도입 순서와 분류</h2>
+<table>
+  <thead>
+    <tr><th>항목</th><th>리뷰 분류</th><th>티켓 시 워크플로우</th><th>선행 의존</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>① 컨텍스트 JIT</td><td>1중(문서/정책) → fast-track 가능</td><td>티켓 → 구현 → 1중 리뷰</td><td>없음 (즉시 착수)</td></tr>
+    <tr><td>② MCP Progressive Disclosure</td><td>3중(아키텍처 변경)</td><td>Discovery → Plan → Review → 3중 검증</td><td>사용 빈도 계측 데이터</td></tr>
+    <tr><td>③ 서버측 독립 검증</td><td>3중(신규 인프라)</td><td>Discovery → Plan → Review → 3중 검증 + Codex</td><td>CI 파이프라인, PR 연동</td></tr>
+    <tr><td>④ 자동 compaction</td><td>2중(워크플로우·정책 + ultragoal 통합)</td><td>Discovery(간략) → Plan → Review → 2중 검증</td><td>handoff 템플릿, ultragoal 경계 준수</td></tr>
+  </tbody>
+</table>
+<div class="callout">
+  <strong>권장:</strong> ①을 즉시 fast-track으로 착수(저위험·고효과)하고, ②③은 각각 정식 워크플로우로 별도 티켓 발행. ②③은 코어/인프라 변경이라 3중 검증(code-reviewer + security-reviewer/codex review + adversarial challenge)이 필수다.
+</div>
+
+<footer>
+  생성: Claude Code (Opus 4.8) · 선행 분석: <code>docs/harness-comparison-2026.html</code> · 본 문서는 개선 제안서로 코드 변경을 포함하지 않으며, 실제 구현은 각 항목별 <code>ai-pm</code> 티켓 발행 후 진행 · 모범 사례 출처는 선행 문서의 §5 참조
+</footer>
+
+</div>
+</body>
+</html>
