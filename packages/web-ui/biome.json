@@ -1,0 +1,17 @@
+{
+	"$schema": "https://biomejs.dev/schemas/1.9.0/schema.json",
+	"extends": ["../../biome.json"],
+	"linter": {
+		"rules": {
+			"a11y": {
+				"useButtonType": "off",
+				"useKeyWithClickEvents": "off",
+				"noSvgWithoutTitle": "off",
+				"noLabelWithoutControl": "off"
+			},
+			"suspicious": {
+				"noArrayIndexKey": "off"
+			}
+		}
+	}
+}
