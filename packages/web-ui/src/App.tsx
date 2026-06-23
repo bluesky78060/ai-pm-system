@@ -1,7 +1,15 @@
 import { Link, Route, Routes, useLocation } from 'react-router-dom';
+import { UNAUTHORIZED_EVENT, clearApiKey } from './api.ts';
+import ApiKeyGate from './components/ApiKeyGate.tsx';
 import Dashboard from './pages/Dashboard.tsx';
 import ProjectDetail from './pages/ProjectDetail.tsx';
 import TaskDetail from './pages/TaskDetail.tsx';
+
+// 로그아웃: 저장된 키 제거 + 전역 이벤트로 게이트 복귀 (APS-3-3).
+function logout() {
+	clearApiKey();
+	window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+}
 
 const navItems = [{ path: '/', label: 'Dashboard' }];
 
@@ -30,14 +38,23 @@ export default function App() {
 							</Link>
 						))}
 					</nav>
+					<button
+						type="button"
+						onClick={logout}
+						className="ml-auto px-3 py-1.5 rounded-md text-sm text-gray-400 hover:text-white hover:bg-gray-800/50 transition-colors"
+					>
+						로그아웃
+					</button>
 				</div>
 			</header>
 			<main className="px-6 py-6">
-				<Routes>
-					<Route path="/" element={<Dashboard />} />
-					<Route path="/projects/:id" element={<ProjectDetail />} />
-					<Route path="/tasks/:id" element={<TaskDetail />} />
-				</Routes>
+				<ApiKeyGate>
+					<Routes>
+						<Route path="/" element={<Dashboard />} />
+						<Route path="/projects/:id" element={<ProjectDetail />} />
+						<Route path="/tasks/:id" element={<TaskDetail />} />
+					</Routes>
+				</ApiKeyGate>
 			</main>
 		</div>
 	);

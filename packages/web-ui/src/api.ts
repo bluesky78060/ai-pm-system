@@ -1,15 +1,64 @@
 const BASE = '/api';
+const API_KEY_STORAGE = 'aipm_api_key';
+
+// 세션 만료(keyed 401) 시 재로그인 게이트로 복귀시키는 전역 이벤트명. 오타 방지 위해 상수화.
+export const UNAUTHORIZED_EVENT = 'apikey-unauthorized';
+
+// API 키 (localStorage). trim 후 비어있지 않은 값만 유효 — 빈/공백 키 전송 금지.
+// localStorage 비가용(프라이빗 모드·스토리지 차단) 시 throw하지 않도록 방어.
+export function getApiKey(): string {
+	try {
+		return (localStorage.getItem(API_KEY_STORAGE) ?? '').trim();
+	} catch {
+		return '';
+	}
+}
+export function setApiKey(key: string): void {
+	try {
+		localStorage.setItem(API_KEY_STORAGE, key.trim());
+	} catch {
+		// 저장 실패(쿼터/차단) 무시 — 키는 이번 세션 메모리에만 존재(새로고침 시 재입력).
+	}
+}
+export function clearApiKey(): void {
+	try {
+		localStorage.removeItem(API_KEY_STORAGE);
+	} catch {
+		// 무시
+	}
+}
+
+// HTTP status가 부착된 에러 — 프로브가 401 vs 비-401(403/500/네트워크)을 구분할 수 있게 함.
+export interface ApiError extends Error {
+	status?: number;
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-	const res = await fetch(`${BASE}${path}`, {
-		headers: { 'Content-Type': 'application/json' },
-		...options,
-	});
+	const key = getApiKey();
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json',
+		...((options?.headers as Record<string, string> | undefined) ?? {}),
+	};
+	if (key) headers['x-api-key'] = key; // 비어있지 않은 키만 전송
+
+	const res = await fetch(`${BASE}${path}`, { ...options, headers });
 	if (!res.ok) {
 		const err = await res.json().catch(() => ({ error: res.statusText }));
-		throw new Error(err.error ?? res.statusText);
+		// 키가 있었는데 401 = 세션 만료/무효 → 키 제거 + 전역 이벤트로 재로그인 유도.
+		// 키 없는(keyless) 401은 게이트 정상 진입 상태이므로 이벤트 발화 안 함(프로브 루프 방지).
+		if (res.status === 401 && key) {
+			clearApiKey();
+			window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+		}
+		const error: ApiError = Object.assign(new Error(err.error ?? res.statusText), {
+			status: res.status,
+		});
+		throw error;
 	}
-	return res.json();
+	// 빈/비-JSON 200 바디(프록시 빈 응답·204 등)에서 res.json() reject로 인증된 사용자가
+	// "연결 실패"에 갇히는 것을 방지 — success 경로도 error 경로처럼 파싱을 가드한다.
+	const text = await res.text();
+	return (text ? JSON.parse(text) : {}) as T;
 }
 
 export interface Project {
