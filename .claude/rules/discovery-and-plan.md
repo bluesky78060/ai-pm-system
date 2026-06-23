@@ -1,3 +1,11 @@
+---
+paths:
+  - "docs/00-discovery/**"
+  - "docs/01-plan/**"
+  - "docs/02-review/**"
+  - "docs/06-research/**"
+---
+
 # Discovery Q&A → 플랜 작성 → 플랜 리뷰 (3~5단계 상세)
 
 ## 3단계: Discovery Q&A → 프로젝트 방향 확정

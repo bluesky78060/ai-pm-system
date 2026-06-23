@@ -1,3 +1,10 @@
+---
+paths:
+  - "packages/**/*.ts"
+  - "packages/**/*.tsx"
+  - "docs/03-code-review/**"
+---
+
 # 코드 리뷰 정책 (Codex 통합 - 옵션 B + 강도 재분류 + Self-healing)
 
 `smart_workflow(task_id, 'approve_review', ...)` 호출 전 다음 정책에 따라 리뷰 수행.

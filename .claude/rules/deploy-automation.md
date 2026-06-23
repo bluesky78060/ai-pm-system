@@ -1,3 +1,8 @@
+---
+paths:
+  - "docs/05-deploy/**"
+---
+
 # gstack 통합 (옵션 2: 배포 자동화)
 
 워크플로우 7단계(smart_workflow done) 이후 배포 단계를 gstack 4개 스킬로 자동화.

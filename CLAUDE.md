@@ -23,20 +23,24 @@
 
 ## 정책 및 통합 (상세 규칙)
 
-| 영역 | 파일 |
-|------|------|
-| Discovery / Plan / Review (3~5단계) | `.claude/rules/discovery-and-plan.md` |
-| 코드 리뷰 (Codex 옵션 B - 3중 검증) | `.claude/rules/code-review.md` |
-| Superpowers 통합 (옵션 1) | `.claude/rules/superpowers-integration.md` |
-| gstack 배포 자동화 (옵션 2) | `.claude/rules/deploy-automation.md` |
-| 에이전트 매핑 | `.claude/rules/agent-mapping.md` |
-| smart_workflow 단계 | `.claude/rules/workflow-steps.md` |
-| 금지 사항 (전체) | `.claude/rules/prohibitions.md` |
-| 개발 단축 팁 (watch/병렬/self-healing) | `.claude/rules/dev-tips.md` |
-| 표준 템플릿 (MCP 도구·외부 API·서비스) | `.claude/templates/` |
-| Fast-track 정책 (1중 분류 단순 변경) | `.claude/rules/fast-track.md` |
-| 연속 실행 원칙 (silent-stop 금지, 중단 시 보고 의무) | `.claude/rules/continuous-execution.md` |
-| OMC 신규 스킬 통합 (wiki/ultragoal/autoresearch · 중복 회피) | `.claude/rules/omc-skills-integration.md` |
+> **컨텍스트 JIT 로딩 (APS-2-8)**: 상세 규칙은 `paths:` frontmatter로 **해당 작업 맥락에서만 자동 로딩**된다(선적재 토큰 절감). 안전 핵심 3종(`prohibitions`·`continuous-execution`·`fast-track`)은 항상 로딩. **JIT 규칙의 도메인을 다루는데 해당 파일이 자동 로딩되지 않았다면, 결정 전에 그 파일을 직접 `Read`할 것.** PreToolUse 하드게이트(아래 §Hook)는 로딩 여부와 무관하게 항상 강제된다.
+>
+> `paths:`는 Claude Code 네이티브 `.claude/rules/` 로딩 메커니즘으로, 매칭 경로를 touch하는 세션에서 해당 규칙이 주입된다(검증: paths 없는 규칙은 세션 시작 시 항상 주입, paths 있는 규칙은 경로 진입 전까지 미주입). 네이티브 동작에 의존하되, 위의 on-demand `Read` 지시를 1차 안전장치로 둔다.
+
+| 영역 | 파일 | 로딩 |
+|------|------|------|
+| 금지 사항 (전체) | `.claude/rules/prohibitions.md` | 항상 |
+| 연속 실행 원칙 (silent-stop 금지, 중단 시 보고 의무) | `.claude/rules/continuous-execution.md` | 항상 |
+| Fast-track 정책 (1중 분류 단순 변경) | `.claude/rules/fast-track.md` | 항상 |
+| Discovery / Plan / Review (3~5단계) | `.claude/rules/discovery-and-plan.md` | JIT: `docs/00·01·02·06-*` |
+| 코드 리뷰 (Codex 옵션 B - 3중 검증) | `.claude/rules/code-review.md` | JIT: `packages/**`·`docs/03-code-review/**` |
+| Superpowers 통합 (옵션 1) | `.claude/rules/superpowers-integration.md` | JIT: `packages/**`·`docs/01-plan/**` |
+| gstack 배포 자동화 (옵션 2) | `.claude/rules/deploy-automation.md` | JIT: `docs/05-deploy/**` |
+| 에이전트 매핑 | `.claude/rules/agent-mapping.md` | JIT: `packages/**` |
+| smart_workflow 단계 | `.claude/rules/workflow-steps.md` | JIT: `packages/**` |
+| 개발 단축 팁 (watch/병렬/self-healing) | `.claude/rules/dev-tips.md` | JIT: `packages/**` |
+| OMC 신규 스킬 통합 (wiki/ultragoal/autoresearch · 중복 회피) | `.claude/rules/omc-skills-integration.md` | JIT: `.omc/**` |
+| 표준 템플릿 (MCP 도구·외부 API·서비스) | `.claude/templates/` | on-demand |
 
 ## 핵심 강제 규칙 (요약)
 

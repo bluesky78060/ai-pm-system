@@ -1,3 +1,10 @@
+---
+paths:
+  - "packages/**/*.ts"
+  - "packages/**/*.tsx"
+  - "docs/01-plan/**"
+---
+
 # Superpowers 통합 (옵션 1: 보강 통합)
 
 기존 워크플로우 골격은 유지하되, 5개 Superpowers 스킬을 자동 트리거로 활성화하여 각 단계의 디테일을 보강.

@@ -1,3 +1,9 @@
+---
+paths:
+  - "packages/**/*.ts"
+  - "packages/**/*.tsx"
+---
+
 # 개발 단축 팁 (dev-tips)
 
 워크플로우 시간 절감을 위한 권장 패턴.
