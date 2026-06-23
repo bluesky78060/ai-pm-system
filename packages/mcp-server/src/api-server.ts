@@ -34,7 +34,10 @@ async function seedIfEmpty() {
 	const project = await ps.create({
 		name: 'AI PM System',
 		description: 'MCP 기반 AI 자율 개발 프로젝트 관리 시스템',
-		github_repo: 'leechanhee/ai-pm-system',
+		// APS-5-13(CRITICAL-1): owner 정정 leechanhee→bluesky78060. 정합성 위생 수정.
+		// NOTE: 이 시드는 seedIfEmpty()의 existing.length>0 early-return 뒤 empty-DB에서만 실행되는 dead-code fallback.
+		// CI 게이트는 PR URL 파생 owner/repo를 쓰므로 github_repo 미사용 → 게이트 동작엔 무영향.
+		github_repo: 'bluesky78060/ai-pm-system',
 	});
 
 	const epics = [

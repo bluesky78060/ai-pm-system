@@ -7,6 +7,7 @@ import { TaskRepository } from '../db/repositories/task-repo.js';
 import { TestRunRepository } from '../db/repositories/test-run-repo.js';
 import type { FixAttempt, Task } from '../types/index.js';
 import { ContextService } from './context-service.js';
+import { GitHubService } from './github-service.js';
 import { TaskService } from './task-service.js';
 
 export interface TestResult {
@@ -63,6 +64,15 @@ export function matchesStrictFlag(code: string | null, envValue: string | undefi
 	return !!code && parseStrictProjects(envValue).includes(code);
 }
 
+/**
+ * matchesCiGateFlag (APS-5-13): 프로젝트 코드가 CI_GATE_PROJECTS 플래그(쉼표구분, 기본 빈값)에
+ * 포함되는지 판정하는 순수 함수. matchesStrictFlag와 동일 패턴/정규화 재사용(DRY).
+ * 미설정(빈값/공백/comma-only) 또는 code 미매칭 → false → CI 게이트 완전 비활성(회귀 0).
+ */
+export function matchesCiGateFlag(code: string | null, envValue: string | undefined): boolean {
+	return !!code && parseStrictProjects(envValue).includes(code);
+}
+
 export class WorkflowService {
 	private taskRepo = new TaskRepository();
 	private activityRepo = new ActivityRepository();
@@ -72,6 +82,7 @@ export class WorkflowService {
 	private projectRepo = new ProjectRepository();
 	private taskService = new TaskService();
 	private contextService = new ContextService();
+	private githubService = new GitHubService();
 
 	/**
 	 * resolveStrict (APS-1-9): STRICT_SUBMIT_TEST_PROJECTS 플래그에 이 태스크의 프로젝트 코드가
@@ -91,6 +102,40 @@ export class WorkflowService {
 		const project = await this.projectRepo.findById(epic.project_id);
 		// 매칭 판정은 순수 함수로 위임 (단위 테스트 대상)
 		return matchesStrictFlag(project?.code ?? null, envValue);
+	}
+
+	/**
+	 * shouldEnforceCiGate (APS-5-13 F-004): 이 태스크가 CI green 게이트 대상인지 판정.
+	 * resolveStrict와 동일 패턴(task→epic→project, 어느 hop이든 miss 시 false 폴백) 재사용.
+	 *  - CI_GATE_PROJECTS env 미설정(빈/공백/comma-only) → false → 게이트 완전 비활성(회귀 0).
+	 *  - enrolled 프로젝트면 **비-fast-track 티켓 전체**를 게이트 대상으로 본다(coarse, 프로젝트 단위).
+	 *    priority proxy는 폐기됨(plan-review 해소 결정): priority는 실행 순서/긴급도이지 중요도가 아니며
+	 *    스키마 default=3과 충돌. fast-track/1중 면제는 서버가 로컬 마커에 접근 불가하므로 hook(fine-grained)이 담당.
+	 *  - TODO(향후): per-task fast-track 면제를 서버에서도 처리하려면 DB 플래그(ci_gate_required boolean) 컬럼
+	 *    마이그레이션이 필요(별도 후속 티켓). 현재 MVP는 enrolled 프로젝트 전체 coarse 적용.
+	 *  - 플래그는 호출 시점에 읽어 테스트의 env 조작이 반영되게 함.
+	 */
+	private async shouldEnforceCiGate(task: Task): Promise<boolean> {
+		const envValue = process.env.CI_GATE_PROJECTS;
+		// 유효 코드가 없으면 DB 조회 생략(성능) + 게이트 비활성(회귀 0).
+		if (parseStrictProjects(envValue).length === 0) return false;
+		const epicId = task.epic_id ?? null;
+		if (!epicId) return false;
+		const epic = await this.epicRepo.findById(epicId);
+		if (!epic?.project_id) return false;
+		const project = await this.projectRepo.findById(epic.project_id);
+		return matchesCiGateFlag(project?.code ?? null, envValue);
+	}
+
+	/**
+	 * resolveCiStatus (APS-5-13 F-002/F-003): enforce 티켓의 연결 PR을 통해 CI 상태를 조회.
+	 * owner/repo/head sha는 모두 PR URL에서 파생(§2.5: PR URL이 SSOT, project.github_repo 미사용).
+	 *  - PR 미연결은 호출 전(approveReview)에서 별도 throw 처리하므로 여기선 github_pr 존재 가정.
+	 *  - 조회 실패(error/timeout)는 GitHubService가 state:'error' 반환 → enforce에서 fail-closed(호출자가 throw).
+	 */
+	private async resolveCiStatus(task: Task) {
+		// github_pr는 approveReview의 PR-before-done 체크를 통과한 뒤에만 도달 → 비-null 보장
+		return this.githubService.getCiStatusForPrUrl(task.github_pr ?? '');
 	}
 
 	/**
@@ -368,6 +413,66 @@ export class WorkflowService {
 		if (!found) {
 			console.error(`[WorkflowService] Task not found: ${taskId}`);
 			throw new Error('태스크를 찾을 수 없습니다');
+		}
+
+		// CI 게이트 (APS-5-13 F-002/F-004/F-008): enrolled 프로젝트(CI_GATE_PROJECTS) 티켓은
+		// done 전환 직전 연결 PR head 커밋의 CI가 success가 아니면 차단(fail-closed).
+		// env 미설정 시 shouldEnforceCiGate=false → 이 블록 전체 skip → 기존 done 동작 100% 보존(회귀 0).
+		//
+		// [done의 유일 chokepoint 불변식 — 보안 MAJOR-1]
+		//   done으로 가는 상태 전환은 task-service.updateStatus에서 review→done이 WORKFLOW_ONLY로 막혀
+		//   bypassGuard 없이는 거부된다. bypassGuard:true로 done을 호출하는 경로는 코드베이스 전체에서
+		//   approveReview() 단 하나뿐(submit_test는 review까지만 bypass). 따라서 이 게이트(approveReview 내부)가
+		//   done 전환의 유일 chokepoint이며, REST 직접 updateStatus(review→done)는 WORKFLOW_ONLY로 차단되어
+		//   게이트를 우회할 수 없다. 이 불변식은 ci-gate.test.ts의 회귀 테스트로 못박혀 있다(우회 경로 추가 시 실패).
+		if (await this.shouldEnforceCiGate(found)) {
+			// 보안 MINOR-2: enrolled인데 API_KEY 미설정이면 서버 write 표면이 무인증(opt-in 인증 skip).
+			// 게이트의 인증 전제가 깨지므로 fail-closed — 무인증 done 차단. (auth.ts: API_KEY 미설정 → 인증 skip)
+			if (!process.env.API_KEY || process.env.API_KEY.trim().length === 0) {
+				throw new Error(
+					'CI 게이트 활성 프로젝트는 API_KEY 필수 — 무인증 변경 표면 차단(fail-closed). 서버에 API_KEY 환경변수를 설정하세요.',
+				);
+			}
+			// F-008(MAJOR-3): CI 조회는 ref(PR head sha)가 필요하므로 PR 연결이 done의 선행 조건.
+			if (!found.github_pr) {
+				throw new Error(
+					'CI 게이트 활성 프로젝트 — done 전 CI-green 연결 PR 필요. /ship으로 PR 생성 후 link_pr_to_task로 연결하세요.',
+				);
+			}
+			const ci = await this.resolveCiStatus(found);
+
+			// gap-2: 차단/통과 무관하게 판정 결과를 throw '이전'에 audit 기록(차단 이벤트 보존, 중복 기록 금지).
+			await this.activityRepo.create({
+				task_id: found.id,
+				actor: 'ai',
+				action: 'ci_gate_check',
+				payload: {
+					state: ci.state,
+					total: ci.total,
+					passed: ci.passed,
+					failedChecks: ci.failedChecks,
+				},
+			});
+
+			if (ci.state === 'error')
+				throw new Error(
+					'CI 조회 실패(error/timeout) — done 차단(fail-closed). GITHUB_TOKEN·네트워크 확인 후 재시도하세요.',
+				);
+			if (ci.state === 'pending')
+				throw new Error('CI 미완료(진행 중) — done 차단. CI green 후 재시도하세요.');
+			if (ci.state === 'failure')
+				throw new Error(
+					`CI 실패 — done 차단. 실패 체크: ${ci.failedChecks.join(', ') || '(상세 없음)'}`,
+				);
+			if (ci.state === 'none')
+				throw new Error('CI 결과 없음 — PR/CI 미설정. verify.yml 동작 확인 필요.');
+			// adversarial MINOR-3: success만 명시적 통과(allow-list). 미래에 CiState union이 늘어나거나
+			// 비-union 상태가 들어와도 "그 외 통과"로 fall-through되지 않고 fail-closed로 차단된다.
+			if (ci.state !== 'success')
+				throw new Error(
+					`CI 상태 미인식(${ci.state}) — done 차단(fail-closed). success가 아닌 상태는 통과시키지 않습니다.`,
+				);
+			// ci.state === 'success' → 통과, 계속 진행
 		}
 
 		let task: Task;

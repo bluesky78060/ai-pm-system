@@ -22,6 +22,7 @@ render-data-backup*
 .omc/
 .claude/active-ticket
 .claude/active-ticket-fasttrack
+.claude/ci-gate-enabled
 .claude/state/
 .claude/settings.local.json
 
