@@ -18,8 +18,8 @@ jobs:
       # 태그는 이동 가능하지만 SHA는 불변 — 트레일링 주석에 사람이 읽을 버전 표기(감사/업데이트 용).
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
-        with:
-          version: 9
+        # APS-5-14: version 키 제거 — package.json packageManager(pnpm@10.30.3)에서 자동 해석.
+        # version 명시 시 packageManager와 충돌(ERR_PNPM_BAD_PM_VERSION)하여 CI 실패함.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
