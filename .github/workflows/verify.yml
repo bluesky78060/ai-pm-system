@@ -34,7 +34,10 @@ jobs:
           EOF
       - name: Build
         run: pnpm -r build
+      # APS-5-15: Test를 -r로 → web-ui 게이트 회귀(APS-3-4 14개 테스트)가 push마다 CI에서 강제됨(jsdom, 무DB).
+      # Lint는 mcp-server만 유지 — web-ui src에 사전 존재하는 biome 부채(29건, charts/SearchBar/TaskModal 등,
+      # 본 변경과 무관)가 있어 -r lint는 별도 정리 후속 티켓 전까지 제외.
       - name: Lint
         run: pnpm --filter @ai-pm/mcp-server lint
       - name: Test
-        run: pnpm --filter @ai-pm/mcp-server test
+        run: pnpm -r test
