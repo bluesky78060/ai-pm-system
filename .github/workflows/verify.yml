@@ -32,7 +32,9 @@ jobs:
       # 자동 유도하지 않는 이유: 한 값에서 두 값을 만들면 대조할 대상이 없어져 오타 방어가 사라진다.
       - name: Setup test env
         run: |
-          cat > .env.test <<EOF
+          # <<'EOF' (quoted): 셸 확장을 끈다. secret 에 $ 나 백틱이 있으면
+          # unquoted heredoc 은 값을 조용히 잘라먹거나 러너에서 명령을 실행한다.
+          cat > .env.test <<'EOF'
           DATABASE_URL=${{ secrets.TEST_DATABASE_URL }}
           TEST_DB_ALLOWED_HOSTS=${{ secrets.TEST_DB_ALLOWED_HOSTS }}
           EOF

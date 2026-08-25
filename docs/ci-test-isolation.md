@@ -14,7 +14,7 @@
 **로컬 격리 인프라** (APS-2-7에서 구축):
 - `.env.test` 파일 → Neon test branch 연결 정보 (브랜치 값은 §브랜치 정보 참조)
 - `vitest.config.ts` → dotenv로 `.env.test` 로드 (**`override: true` 필수** — APS-1-32)
-- `context-service.test.ts` → `PROD_COMPUTE_HOSTS` guard로 production compute 차단
+- `utils/test-db-guard.ts` → `getPool()` 안에서 allow-list 검증 (APS-1-25). 프로덕션 deny-list는 그 앞의 추가 층
 
 **과제**: CI 환경에서 동일 격리가 자동 적용되지 않음 → 본 가이드
 
@@ -88,7 +88,7 @@ Neon 콘솔 또는 저장소 secret 설정에서 직접 확인할 것.
 | **1. .env.test 파일** | `.env.test` (gitignored) | test DATABASE_URL 정의 |
 | **2. 설정 로드** | `vitest.config.ts` dotenv (`override: true`) | 셸의 기존 `DATABASE_URL`을 **덮어씀** |
 | **2b. 로드 실패 시** | 반환값 검사 후 throw | 파일·키 부재 시 **fail-fast** (셸 값 폴백 금지) |
-| **3. Guard 검증** | `PROD_COMPUTE_HOSTS` 배열 + context-service.test.ts 검증 | production 주소 거부 |
+| **3. Guard 검증** | `utils/test-db-guard.ts` (`getPool()` 경유) | allow-list 외 호스트 전부 거부 |
 | **4. 격리된 실행** | `pnpm test` | test branch에만 쓰기 |
 
 **결과**: 격리 3층 (아래 §알려진 한계 참조). 단, 자기 인증의 한계는 남는다.
@@ -100,7 +100,7 @@ Neon 콘솔 또는 저장소 secret 설정에서 직접 확인할 것.
 | **1. Secrets 등록** | GitHub Actions Secrets: `TEST_DATABASE_URL` | 환경변수로 보관 |
 | **2. .env.test 동적 생성** | workflow yml `cat > .env.test <<EOF` | 런타임 파일 생성 |
 | **3. 설정 로드** | 동일 `vitest.config.ts` (`override: true`) | 셸 값을 덮어씀 |
-| **4. Guard 검증** | 동일 `PROD_COMPUTE_HOSTS` guard | production 주소 거부 |
+| **4. Guard 검증** | 동일 `test-db-guard.ts` | allow-list 외 호스트 전부 거부 |
 | **5. 격리된 실행** | `pnpm test` (CI 에이전트 내) | test branch에만 쓰기 |
 
 **결과**: 격리 3층 (동일 메커니즘, CI 환경 적응). 아래 §알려진 한계 참조.
@@ -296,13 +296,13 @@ pnpm --filter @ai-pm/mcp-server test
 # 테스트 시작 전 확인
 cat .env.test | grep DATABASE_URL
 
-# 또는 test 파일에서 PROD_COMPUTE_HOSTS guard로 검증됨
+# 또는 getPool() 의 test-db-guard 가 검증한다
 ```
 
 ## 관련 문서
 
 - **사고 회고**: `docs/03-code-review/APS-2-7-review.md`
-- **로컬 테스트 인프라**: `packages/mcp-server/vitest.config.ts`, `packages/mcp-server/src/__tests__/context-service.test.ts`
+- **로컬 테스트 인프라**: `packages/mcp-server/vitest.config.ts`, `packages/mcp-server/src/utils/test-db-guard.ts`
 - **Neon test branch**: 구체 ID는 이 문서에 고정하지 않는다. §알려진 한계 §브랜치 정보 참조
   (2026-05-19 작성 당시 값은 `br-purple-fog-aoyuc8lg` / `ep-falling-glitter-aoxepm0z`였으나 **현재와 다르다**)
 
@@ -313,7 +313,7 @@ cat .env.test | grep DATABASE_URL
 | CI 테스트 실패: `Cannot connect to database` | `TEST_DATABASE_URL` secret 미설정 | GitHub Actions Secrets에 등록 (단계 1) |
 | CI 테스트가 production DB 수정 | workflow에 `.env.test` 생성 스텝 없음 | workflow YAML에 "Setup test env" 스텝 추가 (단계 2) |
 | 로컬 테스트는 성공, CI 테스트만 실패 | 로컬 `.env.test` ≠ CI `TEST_DATABASE_URL` | 두 값이 동일한 test branch 주소인지 확인 |
-| `PROD_COMPUTE_HOSTS` guard 실패 | test branch 주소가 production compute 포함 | Neon 콘솔에서 test branch compute ID를 직접 재확인 (문서의 값을 믿지 말 것) |
+| `APS-1-25 SAFETY` 로 테스트 중단 | 호스트가 `TEST_DB_ALLOWED_HOSTS` 에 없거나, 프로덕션 compute 이거나, URL 에서 호스트를 확정할 수 없음 | 메시지가 어느 경우인지 알려준다. Neon 콘솔에서 test branch compute ID를 직접 재확인 (문서의 값을 믿지 말 것) |
 
 ---
 
@@ -324,5 +324,5 @@ cat .env.test | grep DATABASE_URL
 - [ ] production 데이터 보호 메커니즘이 정상 작동하는가? (**"4중"이 아니다** — §알려진 한계 참조)
   1. `.env.test` 파일 격리
   2. vitest.config.ts dotenv `override: true` 로드 + 파일·키 부재 시 fail-fast (APS-1-32)
-  3. PROD_COMPUTE_HOSTS guard
+  3. test-db-guard (allow-list + 프로덕션 deny-list)
   4. CI workflow에서의 동적 `.env.test` 생성

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
 	assertTestDatabase,
 	candidateHosts,
@@ -7,7 +7,7 @@ import {
 } from '../utils/test-db-guard.js';
 
 const PROD = 'ep-old-haze-aol2r7dt.c-2.ap-southeast-1.aws.neon.tech';
-const TEST_HOST = 'ep-red-queen-ao7svrsd-pooler.c-2.ap-southeast-1.aws.neon.tech';
+const TEST_HOST = 'test-branch-pooler.region.aws.neon.invalid';
 const url = (host: string, pass = 'pass') => `postgresql://user:${pass}@${host}/neondb`;
 
 // biome의 noDelete를 피하면서 env 키를 실제로 제거한다.
@@ -78,7 +78,7 @@ describe('assertTestDatabase', () => {
 		process.env.VITEST = 'true';
 		process.env.TEST_DB_ALLOWED_HOSTS = TEST_HOST;
 		expect(() => assertTestDatabase(url(TEST_HOST, 'pa#ss'))).toThrow(
-			/호스트명을 해석할 수 없습니다/,
+			/pg가 붙을 호스트를 확정할 수 없습니다/,
 		);
 	});
 
@@ -161,12 +161,15 @@ describe('assertTestDatabase', () => {
 			);
 		});
 
-		it('hostaddr 파라미터도 검사한다', () => {
+		// 재리뷰에서 뒤집힌 테스트다. 이전에는 hostaddr를 후보에 넣어 "검사한다"고
+		// 주장했으나, 실측 결과 pg는 hostaddr를 연결 대상으로 쓰지 않고 authority를
+		// 덮지도 않는다. 즉 우회 방지 효과는 0이면서, 후보 배열을 비지 않게 만들어
+		// fail-closed 분기를 무력화하는 CRITICAL의 트리거였다 (아래 회귀 스위트 참조).
+		// 따라서 authority가 유효하면 hostaddr는 판정에 영향을 주지 않는 것이 **옳다**.
+		it('hostaddr는 authority가 유효하면 판정에 영향을 주지 않는다 (pg가 쓰지 않는 값)', () => {
 			process.env.VITEST = 'true';
 			process.env.TEST_DB_ALLOWED_HOSTS = TEST_HOST;
-			expect(() => assertTestDatabase(`${url(TEST_HOST)}?hostaddr=${PROD}`)).toThrow(
-				/프로덕션 compute/,
-			);
+			expect(() => assertTestDatabase(`${url(TEST_HOST)}?hostaddr=${PROD}`)).not.toThrow();
 		});
 
 		it('?host=가 허용 목록에 있으면 통과한다', () => {
@@ -188,18 +191,17 @@ describe('assertTestDatabase', () => {
 		});
 
 		it('중복 host 키를 candidateHosts가 전부 모은다', () => {
-			expect(candidateHosts(`${url(TEST_HOST)}?host=a.neon.tech&host=b.neon.tech`)).toEqual([
-				TEST_HOST,
-				'a.neon.tech',
-				'b.neon.tech',
-			]);
+			// 순서가 아니라 집합으로 본다 — 1순위는 pg가 실제로 쓸 값(마지막 host)이고,
+			// 나머지는 보수적 합집합이다.
+			expect(candidateHosts(`${url(TEST_HOST)}?host=a.neon.tech&host=b.neon.tech`)?.sort()).toEqual(
+				[TEST_HOST, 'a.neon.tech', 'b.neon.tech'].sort(),
+			);
 		});
 
 		it('candidateHosts가 authority와 쿼리 host를 모두 모은다', () => {
-			expect(candidateHosts(`${url(TEST_HOST)}?host=other.neon.tech`)).toEqual([
-				TEST_HOST,
-				'other.neon.tech',
-			]);
+			expect(candidateHosts(`${url(TEST_HOST)}?host=other.neon.tech`)?.sort()).toEqual(
+				[TEST_HOST, 'other.neon.tech'].sort(),
+			);
 		});
 	});
 
@@ -214,5 +216,80 @@ describe('assertTestDatabase', () => {
 			expect(m).toContain('.env.test');
 			expect(m).toContain('docs/ci-test-isolation.md');
 		}
+	});
+});
+
+/**
+ * APS-1-25 재리뷰(3중 검증)에서 실행으로 증명된 우회들.
+ *
+ * 적대적 검증이 저장소의 `getPool()`을 그대로 통과시켜 엉뚱한 호스트로 dial하는 것을
+ * 확인했다. 원인은 가드가 `pg-connection-string`을 **손으로 재구현**한 것이었고,
+ * 근사와 실제가 갈리는 지점마다 미탐이 났다.
+ *
+ * 이 스위트는 그 페이로드들을 고정한다. 파서를 다시 근사하려는 변경이 있으면 여기서 죽는다.
+ */
+describe('APS-1-25 재리뷰: 파서 근사로 인한 우회 (회귀)', () => {
+	const ALLOWED = 'allowed-test-host.invalid';
+	beforeEach(() => {
+		process.env.VITEST = '1';
+		process.env.TEST_DB_ALLOWED_HOSTS = ALLOWED;
+	});
+	afterEach(() => {
+		unsetEnv('PGHOST');
+	});
+
+	// authority가 비면 pg의 config.host는 '' → falsy → PGHOST(없으면 localhost)로 폴백한다.
+	// 이전 구현은 hostaddr가 후보 배열을 비지 않게 만들어 fail-closed 분기를 무력화했다.
+	it.each([
+		['hostaddr 단독', `postgresql:///neondb?hostaddr=${ALLOWED}`],
+		['host 말미 빈 값', `postgresql:///neondb?host=${ALLOWED}&host=`],
+		['빈 host + hostaddr', `postgresql:///neondb?host=&hostaddr=${ALLOWED}`],
+	])('%s: PGHOST로 폴백하는 URL을 차단한다', (_label, url) => {
+		process.env.PGHOST = 'ep-someone-elses-db.neon.invalid';
+		expect(() => assertTestDatabase(url)).toThrow(/APS-1-25 SAFETY/);
+	});
+
+	it('PGHOST가 프로덕션이면 그 사실을 정확히 지목한다', () => {
+		process.env.PGHOST = PROD;
+		expect(() => assertTestDatabase(`postgresql:///neondb?hostaddr=${ALLOWED}`)).toThrow(
+			/프로덕션 compute를 가리킵니다/,
+		);
+	});
+
+	// pg-connection-string은 socket: 에서 authority를 버리고 pathname을 소켓 경로로 쓴다.
+	it('socket:// 스킴을 차단한다 (authority만 보면 통과해 버린다)', () => {
+		expect(() => assertTestDatabase(`socket://${ALLOWED}/tmp/somesock`)).toThrow(/APS-1-25 SAFETY/);
+	});
+
+	// pg는 authority hostname에 decodeURIComponent를 한 번 더 건다.
+	it('퍼센트 인코딩된 프로덕션 호스트를 deny-list가 잡는다', () => {
+		const encoded = '%65p-old-haze-aol2r7dt.c-2.ap-southeast-1.aws.neon.tech';
+		expect(() => assertTestDatabase(`postgresql://u:p@${encoded}/db`)).toThrow(
+			/프로덕션 compute를 가리킵니다/,
+		);
+	});
+
+	// 정규화 결과가 비는 host 지정을 조용히 버리면 미탐이 된다.
+	it.each([
+		['공백', '%20'],
+		['점 하나', '.'],
+	])('host=%s 처럼 빈 값으로 정규화되는 지정을 차단한다', (_l, v) => {
+		expect(() => assertTestDatabase(`postgresql://${ALLOWED}/db?host=${v}`)).toThrow(
+			/APS-1-25 SAFETY/,
+		);
+	});
+
+	it('정상적인 허용 호스트는 통과한다 (오탐 회귀)', () => {
+		expect(() => assertTestDatabase(`postgresql://u:p@${ALLOWED}/neondb`)).not.toThrow();
+	});
+
+	// 가드가 pg와 **같은 파서 사본**을 쓰는지 고정한다. 다른 사본이 로드되면
+	// 근사 문제가 그대로 재발하므로, 이 테스트가 그 회귀를 잡는다.
+	it('가드와 pg가 동일한 pg-connection-string 사본을 로드한다', async () => {
+		const { createRequire } = await import('node:module');
+		const req = createRequire(import.meta.url);
+		const fromGuard = req.resolve('pg-connection-string');
+		const fromPg = createRequire(req.resolve('pg')).resolve('pg-connection-string');
+		expect(fromGuard).toBe(fromPg);
 	});
 });

@@ -1,3 +1,5 @@
+import { parse as parsePgConnectionString } from 'pg-connection-string';
+
 /**
  * APS-1-25: 테스트 실행이 의도치 않은 데이터베이스에 붙는 것을 막는다.
  *
@@ -58,28 +60,54 @@ export function safeHostname(connectionString: string): string | null {
 }
 
 /**
- * pg가 **실제로 붙을 수 있는** 호스트 후보를 전부 모은다.
+ * pg가 **실제로 붙을 호스트**를 pg 자신의 파서로 구한다.
  *
- * `pg-connection-string`(pg가 쓰는 파서)은 쿼리 파라미터를 그대로 config 키에 채우고
- * `if (!config.host)`일 때만 URL authority의 hostname을 쓴다. 즉 `?host=`가 있으면 그쪽이 이긴다.
+ * 이전 구현은 `new URL()` 위에 파서 동작을 **손으로 재구현**했다. 그 근사가 실제
+ * `pg-connection-string`과 갈리는 입력이 최소 4종 있었고, 적대적 검증이 저장소의
+ * `getPool()`을 그대로 통과해 엉뚱한 호스트로 dial하는 것을 실행으로 증명했다:
  *
- * 두 가지를 놓치기 쉽다. 둘 다 실제로 우회에 쓰였다 (APS-1-25 codex 리뷰):
+ * ```
+ * DATABASE_URL = postgresql:///neondb?hostaddr=<허용호스트>
+ * PGHOST       = <다른 DB>
+ * → 가드: PASS (후보 = ["<허용호스트>"])
+ * → pg:   ENOTFOUND <다른 DB>     ← allow-list·deny-list 둘 다 무력화
+ * ```
  *
- * 1. **`?host=` 존재 자체** — authority만 검사하면
- *    `postgresql://u:p@<허용호스트>/db?host=<프로덕션>`이 통과한다.
- * 2. **같은 키의 중복** — `searchParams.get('host')`는 **첫 값**을 주는데
- *    `pg-connection-string`은 entries를 순회하며 덮어쓰므로 **마지막 값**이 이긴다.
- *    `?host=<허용>&host=<프로덕션>`이면 가드는 허용을 보고 pg는 프로덕션에 붙는다.
- *    그래서 `getAll()`로 **모든 값**을 모은다.
+ * 원인: authority가 비면 `config.host`가 빈 문자열이 되고, pg의 `val()`이 그것을
+ * falsy로 보아 `PGHOST`(없으면 `localhost`)로 폴백한다. 그런데 `hostaddr`가 후보 배열을
+ * 비지 않게 만들어 fail-closed 분기(`hosts === null`)가 발화하지 않았다.
+ * **보수적으로 넣은 값이 방어를 없앴다.**
  *
- * `hostaddr`도 함께 모은다. 현재 pg 버전에서 이 값은 연결 host를 오버라이드하지 **않지만**,
- * libpq 시맨틱에서는 접속 주소를 지정하는 값이고 파서 구현이 바뀔 수 있으므로 보수적으로 검사한다.
- * 그 결과 `hostaddr`에 허용되지 않은 값을 넣으면 오탐으로 차단될 수 있다 — 의도된 보수성이다.
+ * 교훈은 일반적이다 — 신뢰 경계를 넘는 입력을 **소비자와 다른 파서로 검사하면**,
+ * 두 해석이 갈리는 순간 방어가 무너진다. 그래서 이제 pg가 쓰는 파서를 그대로 부른다.
  *
- * 후보가 하나도 없으면(파싱 실패, authority·쿼리 모두 비어 있음) `null`을 돌려 호출자가 차단하게 한다.
- * 유닉스 소켓 URL(`postgresql:///db?host=/var/run/postgresql`)도 이 경로로 차단된다 —
- * 이 저장소는 Neon/Render만 쓰므로 fail-closed를 택했다. 필요하면 소켓 경로를
- * `TEST_DB_ALLOWED_HOSTS`에 넣어 허용할 수 있다.
+ * `hostaddr`는 후보에서 **뺐다**. 실측 결과 pg는 이 값을 연결 대상으로 쓰지 않고
+ * (`connection-parameters.js`의 유일한 hostaddr 참조는 DNS 해석 결과를 libpq 문자열로
+ * 쓰는 반대 방향이다), authority를 덮지도 않는다. 우회를 막는 효과는 0이면서
+ * 오탐과 위 fail-open만 만들었다.
+ */
+function effectiveHost(connectionString: string): string | null {
+	try {
+		// pg가 쓰는 바로 그 파서. 근사하지 않는다.
+		const cfg = parsePgConnectionString(connectionString);
+		// pg/lib/connection-parameters.js 의 val('host', config) 규칙을 그대로 재현한다.
+		const raw = cfg.host || process.env.PGHOST || 'localhost';
+		const n = normalizeHost(String(raw));
+		return n || null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * 검사 대상 호스트 집합. `null`이면 호출자가 차단한다.
+ *
+ * 1순위는 `effectiveHost()` — pg가 실제로 쓸 값이다.
+ * 거기에 authority와 모든 `?host=` 값을 **합집합**으로 더한다. 파서 구현이 바뀌어도
+ * 미탐이 생기지 않게 하는 여분의 층이며, 오탐 쪽으로만 기운다.
+ *
+ * `?host=`가 있는데 정규화 결과가 비면(`?host=%20`, `?host=.`) 조용히 버리지 않고
+ * **차단한다.** 버리면 "host를 지정했는데 후보에서 사라지는" 미탐이 된다.
  */
 export function candidateHosts(connectionString: string): string[] | null {
 	let url: URL;
@@ -88,18 +116,30 @@ export function candidateHosts(connectionString: string): string[] | null {
 	} catch {
 		return null;
 	}
-	const hosts: string[] = [];
-	const push = (raw: string | null | undefined) => {
-		if (!raw) return;
+
+	// 스킴 화이트리스트. `socket:`은 authority를 버리고 pathname을 유닉스 소켓 경로로 쓴다
+	// (pg-connection-string이 early return한다). authority만 보면 통과시켜 버린다.
+	if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') {
+		return null;
+	}
+
+	const eff = effectiveHost(connectionString);
+	if (eff === null) return null;
+
+	const hosts: string[] = [eff];
+	const push = (raw: string) => {
 		const n = normalizeHost(raw);
 		if (n && !hosts.includes(n)) hosts.push(n);
+		return n;
 	};
-	push(url.hostname);
+
+	if (url.hostname) push(url.hostname);
 	// getAll: 같은 키가 여러 번 오면 pg는 마지막 값을 쓴다. 전부 검사한다.
-	for (const key of ['host', 'hostaddr']) {
-		for (const v of url.searchParams.getAll(key)) push(v);
+	for (const v of url.searchParams.getAll('host')) {
+		if (!push(v)) return null; // 빈 값으로 정규화되는 host 지정 → fail-closed
 	}
-	return hosts.length > 0 ? hosts : null;
+
+	return hosts;
 }
 
 function fail(reason: string, hint: string): never {
@@ -116,7 +156,7 @@ function fail(reason: string, hint: string): never {
 /**
  * 테스트 실행 중이면 DATABASE_URL의 호스트를 검사한다. 프로덕션 경로에서는 아무것도 하지 않는다.
  *
- * 판정 순서 — 앞선 단계가 이긴다. **pg가 붙을 수 있는 모든 호스트에 대해** 적용한다:
+ * 판정 순서 — 앞선 단계가 이긴다. **pg가 실제로 붙을 호스트(+ 보수적 합집합)에 대해** 적용한다:
  *   1. VITEST 미설정        → 통과 (프로덕션 경로. 가드 대상 아님)
  *   2. 호스트 파싱 실패      → 차단 (확인 불가능하면 통과시킬 수 없다)
  *   3. 프로덕션 호스트       → 차단 (allow-list보다 먼저. 실수로 allow-list에 넣어도 막는다)
@@ -132,8 +172,10 @@ export function assertTestDatabase(connectionString: string): void {
 	const hosts = candidateHosts(connectionString);
 	if (hosts === null) {
 		fail(
-			'DATABASE_URL에서 호스트명을 해석할 수 없습니다.',
-			'비밀번호에 #, ?, / 같은 문자가 있으면 URL 파싱이 실패합니다. 퍼센트 인코딩(%23, %3F, %2F)으로 바꾸거나 비밀번호를 재발급하십시오.',
+			'DATABASE_URL에서 pg가 붙을 호스트를 확정할 수 없습니다.',
+			'다음 중 하나입니다: (1) postgresql://host/db 형식이 아니다 (socket:, libpq key=value, 소켓 경로 등은 지원하지 않습니다), ' +
+				'(2) 호스트가 비어 있다, (3) 비밀번호의 #, ?, / 때문에 URL 파싱이 실패했다 — 퍼센트 인코딩(%23, %3F, %2F)으로 바꾸거나 재발급하십시오. ' +
+				'와일드카드(*.neon.tech)는 지원하지 않습니다.',
 		);
 	}
 
