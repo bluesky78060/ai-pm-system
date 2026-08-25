@@ -10,6 +10,30 @@ import { ContextService } from './context-service.js';
 import { GitHubService } from './github-service.js';
 import { TaskService } from './task-service.js';
 
+/**
+ * 워크플로 전환 실패 에러를 만들어 던진다. (APS-1-18)
+ *
+ * 내부 UUID를 응답에 담지 않는다 — api-server.ts의 wrapAsync가 이 메시지를 그대로 REST 응답
+ * 본문에 넣기 때문이다. 전체 식별자는 서버 로그에만 남긴다(정보를 없애는 게 아니라 옮긴다).
+ *
+ * 자리표시자가 '미상'인 이유: utils/error-status.ts의 getErrorStatus가 메시지 문자열로 HTTP
+ * 상태를 정하며 '없'이 들어가면 404가 된다. '식별자 없음' 같은 문구를 쓰면 400이어야 할 상태
+ * 전환 오류가 404로 둔갑한다(APS-1-18 초안의 실제 결함). 이 문구를 바꿀 때는 getErrorStatus의
+ * 키워드 목록을 먼저 확인할 것.
+ *
+ * 반환형이 never인 이유: Error를 반환하면 호출부가 throw를 빠뜨려도 TS가 잡지 못해
+ * "로그는 찍히는데 예외는 안 던져지는" 조용한 버그가 가능하다.
+ */
+export function workflowFailure(
+	action: string,
+	task: { id: string; ticket_code: string | null },
+	e: unknown,
+): never {
+	const detail = (e as Error).message;
+	console.error(`[WorkflowService] ${action} failed for ${task.id}: ${detail}`);
+	throw new Error(`${action} 실패 (${task.ticket_code ?? '미상'}): ${detail}`);
+}
+
 export interface TestResult {
 	test_type: string;
 	status: string;
@@ -162,7 +186,7 @@ export class WorkflowService {
 			);
 			task = result.task;
 		} catch (e) {
-			throw new Error(`작업 시작 실패 (${found.ticket_code ?? found.id}): ${(e as Error).message}`);
+			workflowFailure('작업 시작', found, e);
 		}
 
 		const subtasks = await this.taskService.getSubtasks(task.id);
@@ -242,9 +266,7 @@ export class WorkflowService {
 				);
 				task = result.task;
 			} catch (e) {
-				throw new Error(
-					`testing 상태 전환 실패 (${task.ticket_code ?? task.id}): ${(e as Error).message}`,
-				);
+				workflowFailure('testing 상태 전환', task, e);
 			}
 		}
 
@@ -275,9 +297,7 @@ export class WorkflowService {
 				);
 				task = result.task;
 			} catch (e) {
-				throw new Error(
-					`review 상태 전환 실패 (${task.ticket_code ?? task.id}): ${(e as Error).message}`,
-				);
+				workflowFailure('review 상태 전환', task, e);
 			}
 		} else {
 			// 수정 시도 횟수 확인
@@ -292,9 +312,7 @@ export class WorkflowService {
 					);
 					task = result.task;
 				} catch (e) {
-					throw new Error(
-						`fixing 상태 전환 실패 (${task.ticket_code ?? task.id}): ${(e as Error).message}`,
-					);
+					workflowFailure('fixing 상태 전환', task, e);
 				}
 			} else {
 				try {
@@ -305,9 +323,7 @@ export class WorkflowService {
 					);
 					task = result.task;
 				} catch (e) {
-					throw new Error(
-						`blocked 상태 전환 실패 (${task.ticket_code ?? task.id}): ${(e as Error).message}`,
-					);
+					workflowFailure('blocked 상태 전환', task, e);
 				}
 			}
 		}
@@ -371,9 +387,7 @@ export class WorkflowService {
 			);
 			task = result.task;
 		} catch (e) {
-			throw new Error(
-				`testing 상태 전환 실패 (${found.ticket_code ?? found.id}): ${(e as Error).message}`,
-			);
+			workflowFailure('testing 상태 전환', found, e);
 		}
 
 		await this.activityRepo.create({
@@ -485,9 +499,7 @@ export class WorkflowService {
 			);
 			task = result.task;
 		} catch (e) {
-			throw new Error(
-				`done 상태 전환 실패 (${found.ticket_code ?? found.id}): ${(e as Error).message}`,
-			);
+			workflowFailure('done 상태 전환', found, e);
 		}
 
 		// 에픽 완료율 계산
@@ -571,9 +583,7 @@ export class WorkflowService {
 			);
 			task = result.task;
 		} catch (e) {
-			throw new Error(
-				`in_progress 상태 전환 실패 (${found.ticket_code ?? found.id}): ${(e as Error).message}`,
-			);
+			workflowFailure('in_progress 상태 전환', found, e);
 		}
 
 		await this.activityRepo.create({

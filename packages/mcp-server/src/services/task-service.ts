@@ -325,7 +325,22 @@ export class TaskService {
 		const dependsOnId = dep.id;
 
 		if (await taskRepo.hasCircularDependency(taskId, dependsOnId)) {
-			throw new Error(`순환 의존성이 감지되었습니다: ${taskId} → ${dependsOnId}`);
+			// APS-1-18: 응답 메시지에 식별자를 담지 않는다.
+			//
+			// (1) 내부 UUID를 넣으면 호출자가 준 적 없는 식별자가 REST로 샌다 —
+			//     api-server.ts의 wrapAsync가 이 메시지를 그대로 응답 본문에 넣기 때문이다.
+			// (2) title이나 ticket_code로 바꾸는 것도 안 된다. utils/error-status.ts의
+			//     getErrorStatus가 **메시지 내용**으로 HTTP 상태를 정하므로, 사용자가 정하는
+			//     문자열을 넣으면 상태 코드가 사용자 조종 가능해진다. 실측: title이
+			//     'not found ...'이면 404, 'invalid ...'이면 422, 'duplicate ...'이면 409가 된다.
+			//     프로젝트 코드도 안전하지 않다 — 'MUST-1-2'는 'must' 때문에 422가 된다.
+			// (3) 애초에 호출자가 두 식별자를 방금 인자로 보냈으므로 되돌려줄 정보 가치가 없다.
+			//
+			// 전체 식별자는 서버 로그에만 남긴다. 상태 코드는 400으로 유지된다(변경 전과 동일).
+			console.error(
+				`[TaskService] Circular dependency: ${taskId} (${task.title}) -> ${dependsOnId} (${dep.title})`,
+			);
+			throw new Error('순환 의존성이 감지되었습니다');
 		}
 
 		await taskRepo.addDependency(taskId, dependsOnId);

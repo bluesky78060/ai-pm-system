@@ -21,6 +21,8 @@ import { TestService } from './services/test-service.js';
 import { TimeTrackingService } from './services/time-tracking-service.js';
 import { WorkflowService } from './services/workflow-service.js';
 import { WorkloadService } from './services/workload-service.js';
+// APS-1-18: 테스트가 실제 함수를 검증할 수 있도록 분리된 모듈. utils/error-status.ts 참조.
+import { getErrorStatus } from './utils/error-status.js';
 
 await runMigrations();
 
@@ -97,22 +99,6 @@ app.get('/health', (_req, res) => {
 
 // All /api routes require API key
 app.use('/api', apiKeyAuth);
-
-// Helper: map error message to HTTP status code
-function getErrorStatus(msg: string): number {
-	const lower = msg.toLowerCase();
-	if (lower.includes('not found') || lower.includes('없')) return 404;
-	if (lower.includes('circular') || lower.includes('already') || lower.includes('duplicate'))
-		return 409;
-	if (
-		lower.includes('invalid') ||
-		lower.includes('must') ||
-		lower.includes('required') ||
-		lower.includes('cannot')
-	)
-		return 422;
-	return 400;
-}
 
 // Helper: wrap async handlers
 function wrapAsync(fn: (req: express.Request) => Promise<unknown>) {
