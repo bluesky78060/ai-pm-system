@@ -27,10 +27,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # CRITICAL: test DB 격리 (docs/ci-test-isolation.md — APS-2-7 사고 회고 준수).
       # TEST_DATABASE_URL은 반드시 Neon test branch (production 금지).
+      # APS-1-25: TEST_DB_ALLOWED_HOSTS secret도 필요하다(값 = TEST_DATABASE_URL의 호스트명).
+      # 설정하지 않으면 가드가 fail-closed로 테스트를 차단한다 — 의도된 동작이다.
+      # 자동 유도하지 않는 이유: 한 값에서 두 값을 만들면 대조할 대상이 없어져 오타 방어가 사라진다.
       - name: Setup test env
         run: |
           cat > .env.test <<EOF
           DATABASE_URL=${{ secrets.TEST_DATABASE_URL }}
+          TEST_DB_ALLOWED_HOSTS=${{ secrets.TEST_DB_ALLOWED_HOSTS }}
           EOF
       - name: Build
         run: pnpm -r build

@@ -2,29 +2,25 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 // APS-2-7 safety guard — refuse to run if DATABASE_URL points at production.
 // The 20:42 KST incident (5 projects wiped) happened because tests connected
-// to the production Neon branch. vitest.config.ts now loads .env.test which
-// overrides DATABASE_URL to a dedicated test branch; this guard is the
-// defense-in-depth check that catches misconfiguration before any query runs.
+// to the production Neon branch. vitest.config.ts loads .env.test with
+// `override: true` and fails fast when the file or the DATABASE_URL key is
+// missing (APS-1-32) — without both, a DATABASE_URL already exported in the
+// shell silently wins and this suite would run against it.
+//
+// The production-host check that used to live here has moved to
+// utils/test-db-guard.ts and now runs inside getPool() (APS-1-25). It is an
+// allow-list: unknown hosts are blocked by default, and the ?host= query
+// parameter is checked too. The only check left in this file is the
+// DATABASE_URL-is-set assertion below.
 const dbUrl = process.env.DATABASE_URL ?? '';
 if (!dbUrl) {
 	throw new Error(
 		'APS-2-7 SAFETY: DATABASE_URL is not set. Create .env.test at repo root pointing to a dedicated test database.',
 	);
 }
-// Compute hosts for the production branch (br-billowing-heart-aozi9xug). Update
-// this list if Neon recreates the production endpoint. Verified via the Neon MCP
-// `list_branch_computes` tool on 2026-05-18 during the APS-2-7 incident recovery.
-const PROD_COMPUTE_HOSTS = [
-	'ep-old-haze-aol2r7dt.c-2.ap-southeast-1.aws.neon.tech',
-	'ep-old-haze-aol2r7dt-pooler.c-2.ap-southeast-1.aws.neon.tech',
-];
-if (PROD_COMPUTE_HOSTS.some((host) => dbUrl.includes(host))) {
-	throw new Error(
-		'APS-2-7 SAFETY: DATABASE_URL points at the production Neon compute ' +
-			'(ep-old-haze-aol2r7dt). Tests must use a dedicated branch endpoint via .env.test ' +
-			'(loaded by vitest.config.ts). See the SAFETY block below for context.',
-	);
-}
+// APS-1-25: 프로덕션 compute 차단 가드는 utils/test-db-guard.ts로 중앙화됐고
+// getPool()에서 호출된다. 두 파일에 중복돼 있던 것을 제거했다 —
+// 가드는 테스트 하네스가 아니라 실제로 풀을 여는 지점에 있어야 한다.
 
 let ContextService: typeof import('../services/context-service.js').ContextService;
 let ProjectRepository: typeof import('../db/repositories/project-repo.js').ProjectRepository;

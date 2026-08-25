@@ -8,18 +8,9 @@ if (!dbUrl) {
 		'APS-5-1 SAFETY: DATABASE_URL is not set. Create .env.test at repo root pointing to a dedicated test database.',
 	);
 }
-// Compute hosts for the production branch (br-billowing-heart-aozi9xug).
-const PROD_COMPUTE_HOSTS = [
-	'ep-old-haze-aol2r7dt.c-2.ap-southeast-1.aws.neon.tech',
-	'ep-old-haze-aol2r7dt-pooler.c-2.ap-southeast-1.aws.neon.tech',
-];
-if (PROD_COMPUTE_HOSTS.some((host) => dbUrl.includes(host))) {
-	throw new Error(
-		'APS-5-1 SAFETY: DATABASE_URL points at the production Neon compute ' +
-			'(ep-old-haze-aol2r7dt). Tests must use a dedicated branch endpoint via .env.test ' +
-			'(loaded by vitest.config.ts).',
-	);
-}
+// APS-1-25: 프로덕션 compute 차단 가드는 utils/test-db-guard.ts로 중앙화됐고
+// getPool()에서 호출된다. 두 파일에 중복돼 있던 것을 제거했다 —
+// 가드는 테스트 하네스가 아니라 실제로 풀을 여는 지점에 있어야 한다.
 
 // Dynamic imports
 let TaskService: typeof import('../services/task-service.js').TaskService;
