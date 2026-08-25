@@ -106,8 +106,15 @@ function effectiveHost(connectionString: string): string | null {
  * 거기에 authority와 모든 `?host=` 값을 **합집합**으로 더한다. 파서 구현이 바뀌어도
  * 미탐이 생기지 않게 하는 여분의 층이며, 오탐 쪽으로만 기운다.
  *
- * `?host=`가 있는데 정규화 결과가 비면(`?host=%20`, `?host=.`) 조용히 버리지 않고
- * **차단한다.** 버리면 "host를 지정했는데 후보에서 사라지는" 미탐이 된다.
+ * `?host=`가 있는데 정규화 결과가 비면(`?host=%20`, `?host=.`, `?host=`) 차단한다.
+ *
+ * 정직하게 적어 둔다 — **이것은 미탐 방어가 아니라 추가 보수성이다.** 적대적 검증이
+ * 실측으로 보였듯, 값이 비면 pg는 authority로 폴백하므로 `effectiveHost()`가 이미
+ * 정답을 낸다. `?host=%20`·`?host=.` 도 `normalizeHost`가 빈 문자열을 내
+ * `eff === null`에서 먼저 잡힌다. 즉 이 분기가 막은 실제 우회는 아직 하나도 없다.
+ * 그럼에도 남기는 이유는 "호스트를 지정했는데 해석 결과가 없다"가 정상 설정이 아니고,
+ * 이 파일의 방침이 모호하면 차단하는 쪽이기 때문이다. 오탐 비용은 있다 —
+ * `postgresql://<허용>/db?host=` 는 pg가 정상 연결하지만 여기서 막힌다.
  */
 export function candidateHosts(connectionString: string): string[] | null {
 	let url: URL;
@@ -124,6 +131,12 @@ export function candidateHosts(connectionString: string): string[] | null {
 	}
 
 	const eff = effectiveHost(connectionString);
+	// 이 줄은 **런타임 테스트가 아니라 tsc가 고정한다.** 지우면
+	// `Type 'string | null' is not assignable to type 'string'` 로 빌드가 깨진다.
+	// 변이 검증에서 이 줄만 테스트가 살아남았는데, 그것이 정상이다 — effectiveHost가
+	// null을 내는 것은 parse()가 던질 때뿐이고 그때는 pg도 똑같이 던지므로,
+	// "엉뚱한 호스트로 dial하는 것"을 이 줄이 단독으로 막은 사례는 없다.
+	// 없는 방어를 있는 것처럼 보이려고 테스트를 만들지 않는다.
 	if (eff === null) return null;
 
 	const hosts: string[] = [eff];

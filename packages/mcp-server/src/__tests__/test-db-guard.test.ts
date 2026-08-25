@@ -257,8 +257,21 @@ describe('APS-1-25 재리뷰: 파서 근사로 인한 우회 (회귀)', () => {
 	});
 
 	// pg-connection-string은 socket: 에서 authority를 버리고 pathname을 소켓 경로로 쓴다.
-	it('socket:// 스킴을 차단한다 (authority만 보면 통과해 버린다)', () => {
-		expect(() => assertTestDatabase(`socket://${ALLOWED}/tmp/somesock`)).toThrow(/APS-1-25 SAFETY/);
+	// 사유까지 단언한다. /APS-1-25 SAFETY/ 만 보면 화이트리스트를 지워도
+	// allow-list 층이 대신 차단해 테스트가 **맞는 이유 없이** 통과한다(변이 생존).
+	it('socket:// 스킴을 스킴 검사 단계에서 차단한다', () => {
+		expect(() => assertTestDatabase(`socket://${ALLOWED}/tmp/somesock`)).toThrow(
+			/pg가 붙을 호스트를 확정할 수 없습니다/,
+		);
+	});
+
+	// 소켓 경로가 allow-list에 있으면 뒤 층이 통과시키므로, 스킴 검사만이 유일한 방어다.
+	// 화이트리스트를 제거하면 이 테스트가 죽는다.
+	it('소켓 경로가 allow-list에 있어도 socket:// 는 통과하지 못한다', () => {
+		process.env.TEST_DB_ALLOWED_HOSTS = `${ALLOWED},/tmp/somesock`;
+		expect(() => assertTestDatabase(`socket://${ALLOWED}/tmp/somesock`)).toThrow(
+			/pg가 붙을 호스트를 확정할 수 없습니다/,
+		);
 	});
 
 	// pg는 authority hostname에 decodeURIComponent를 한 번 더 건다.
@@ -275,7 +288,15 @@ describe('APS-1-25 재리뷰: 파서 근사로 인한 우회 (회귀)', () => {
 		['점 하나', '.'],
 	])('host=%s 처럼 빈 값으로 정규화되는 지정을 차단한다', (_l, v) => {
 		expect(() => assertTestDatabase(`postgresql://${ALLOWED}/db?host=${v}`)).toThrow(
-			/APS-1-25 SAFETY/,
+			/pg가 붙을 호스트를 확정할 수 없습니다/,
+		);
+	});
+
+	// 값이 없는 ?host= 는 pg가 authority로 폴백하므로 effectiveHost()가 정답을 낸다.
+	// 그래도 차단하는 것은 **추가 보수성**이지 미탐 방어가 아니다 — 아래 주석 참조.
+	it('값 없는 ?host= 도 차단한다 (보수적 fail-closed)', () => {
+		expect(() => assertTestDatabase(`postgresql://${ALLOWED}/db?host=`)).toThrow(
+			/pg가 붙을 호스트를 확정할 수 없습니다/,
 		);
 	});
 
