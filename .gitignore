@@ -8,6 +8,7 @@ data/*.db-shm
 .env.bak*
 .env.test
 .env.test.local
+.env.test*bak
 *.log
 
 # SQL backups (HIGH: prod data exposure if committed) — APS-2-7
